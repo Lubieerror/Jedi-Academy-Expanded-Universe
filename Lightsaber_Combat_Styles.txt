@@ -1,0 +1,18 @@
+Forms in the game:
+
+Light Style
+Medium Style
+Heavy Style
+(these should be removed as we replace them with Makashi, Shii-cho, and Djem-so)
+
+Forms to be added:
+
+Shii-cho*
+Makashi*
+Soresu
+Ataru
+Djem-so*
+Niman
+Juyo/Vaapad
+
+* should be worked on first to replace the older styles. These correspond best to the Light, Medium, and Heavy styles; Makashi, Shii-cho, and Djem-so respectively.
