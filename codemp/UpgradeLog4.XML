@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?><?xml-stylesheet type='text/xsl' href='_UpgradeReport_Files/UpgradeReport.xslt'?><UpgradeLog>
+<Properties><Property Name="Solution" Value="JKA_mp">
+</Property><Property Name="Solution File" Value="C:\Users\Prateek\Documents\Expanded_Universe_Mod\codemp\JKA_mp.sln">
+</Property><Property Name="Date" Value="Monday, April 08, 2013">
+</Property><Property Name="Time" Value="17:54 PM">
+</Property><Property Name="Log Number" Value="4">
+</Property></Properties><Event ErrorLevel="3" Project="x_botlib" Source="x_botlib\x_botlib.vcproj" Description="No Conversion Required">
+</Event><Event ErrorLevel="3" Project="x_exe" Source="x_exe\x_exe.vcproj" Description="No Conversion Required">
+</Event><Event ErrorLevel="3" Project="x_jk2cgame" Source="x_jk2cgame\x_jk2cgame.vcproj" Description="No Conversion Required">
+</Event><Event ErrorLevel="3" Project="x_jk2game" Source="x_jk2game\x_jk2game.vcproj" Description="No Conversion Required">
+</Event><Event ErrorLevel="3" Project="x_ui" Source="x_ui\x_ui.vcproj" Description="No Conversion Required">
+</Event><Event ErrorLevel="3" Project="goblib" Source="goblib\goblib.vcproj" Description="No Conversion Required">
+</Event><Event ErrorLevel="0" Project="" Source="JKA_mp.sln" Description="The solution file does not require conversion.">
+</Event><Event ErrorLevel="3" Project="" Source="JKA_mp.sln" Description="No Conversion Required">
+</Event></UpgradeLog>

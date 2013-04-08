@@ -1,0 +1,11 @@
+Step 1: Merge the code with OpenJK's, which compiles. We love you long time, OpenJK people.
+
+Step 2: Procure the game assets and get them to work. Shouldn't be too hard, we just have to excavate the CDs.
+
+Step 3: Clean up the code so there's an easier pipeline into adding new weapons and styles, probably by porting over to C++ and using classes. This shouldn't break the game assets.
+
+Step 4: Add said new weapon/style/power, including animations and stuff. This probably will break the game assets.
+
+Step 4.5: Find/make new assets to replace the ones we broke.
+
+Step 5: Goto 4.
