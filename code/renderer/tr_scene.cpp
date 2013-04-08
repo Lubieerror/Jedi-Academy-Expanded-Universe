@@ -206,9 +206,6 @@ void RE_AddRefEntityToScene( const refEntity_t *ent ) {
 
 	backEndData->entities[r_numentities].e = *ent;
 	backEndData->entities[r_numentities].lightingCalculated = qfalse;
-#ifdef _XBOX
-	backEndData->entities[r_numentities].visible = -1;
-#endif
 
 	r_numentities++;
 }
@@ -291,7 +288,7 @@ void RE_RenderScene( const refdef_t *fd ) {
 
 	tr.refdef.time = fd->time;
 	tr.refdef.frametime = fd->time - lastTime;
-	tr.refdef.rdflags = fd->rdflags;
+	//tr.refdef.rdflags = fd->rdflags;				// Breaks light amp goggles, among other things.
 
 	if (fd->rdflags & RDF_SKYBOXPORTAL)
 	{

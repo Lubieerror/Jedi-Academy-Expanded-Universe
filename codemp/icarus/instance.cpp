@@ -1,5 +1,5 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 // ICARUS Instance
 //
@@ -58,7 +58,7 @@ ICARUS_Instance *ICARUS_Instance::Create( interface_export_t *ie )
 	ICARUS_Instance *instance = new ICARUS_Instance;
 	instance->m_interface = ie;
 #ifndef __linux__
-	Com_Printf( "ICARUS Instance successfully created\n" );
+	OutputDebugString( "ICARUS Instance successfully created\n" );
 #endif
 	return instance;
 }

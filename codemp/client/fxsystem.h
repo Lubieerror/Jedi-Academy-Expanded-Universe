@@ -3,8 +3,8 @@
 #define FX_SYSTEM_H_INC
 
 #if !defined(G2_H_INC)
-	#include "../ghoul2/G2.h"
-	#include "../ghoul2/G2_local.h"
+	#include "ghoul2/G2.h"
+	#include "ghoul2/G2_local.h"
 #endif
 
 extern cvar_t	*fx_debug;
@@ -106,7 +106,7 @@ public:
 	// Physics/collision
 	inline	void	Trace( trace_t &tr, vec3_t start, vec3_t min, vec3_t max, vec3_t end, int skipEntNum, int flags )
 	{
-		TCGTrace		*td = (TCGTrace *)cl->mSharedMemory;
+		TCGTrace		*td = (TCGTrace *)cl.mSharedMemory;
 
 		if ( !min )
 		{
@@ -118,10 +118,7 @@ public:
 			max = vec3_origin;
 		}
 
-		// MATT - what was this?
-//		memset(td, sizeof(*td), 0);
-		memset(td, 0, sizeof(*td));
-
+		memset(td, sizeof(*td), 0);
 		VectorCopy(start, td->mStart);
 		VectorCopy(min, td->mMins);
 		VectorCopy(max, td->mMaxs);
@@ -136,7 +133,7 @@ public:
 
 	inline	void	G2Trace( trace_t &tr, vec3_t start, vec3_t min, vec3_t max, vec3_t end, int skipEntNum, int flags )
 	{
-		TCGTrace		*td = (TCGTrace *)cl->mSharedMemory;
+		TCGTrace		*td = (TCGTrace *)cl.mSharedMemory;
 
 		if ( !min )
 		{
@@ -163,7 +160,7 @@ public:
 
 	inline	void	AddGhoul2Decal(int shader, vec3_t start, vec3_t dir, float size)
 	{
-		TCGG2Mark		*td = (TCGG2Mark *)cl->mSharedMemory;
+		TCGG2Mark		*td = (TCGG2Mark *)cl.mSharedMemory;
 
 		td->size = size;
 		td->shader = shader;
@@ -191,12 +188,12 @@ public:
 #endif
 		re.AddMiniRefEntityToScene( ent );
 	}
-
+#ifndef VV_LIGHTING
 	inline	void	AddLightToScene( vec3_t org, float radius, float red, float green, float blue )
 	{
 		re.AddLightToScene(	org, radius, red, green, blue );
 	}
-
+#endif
 
 	inline	int		RegisterShader( const char *shader )
 	{

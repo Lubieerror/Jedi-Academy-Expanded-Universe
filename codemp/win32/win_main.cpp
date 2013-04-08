@@ -1,8 +1,8 @@
 // win_main.c
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
-#include "../client/client.h"
+#include "client/client.h"
 #include "win_local.h"
 #include "resource.h"
 #include <errno.h>
@@ -12,7 +12,7 @@
 #include <direct.h>
 #include <io.h>
 #include <conio.h>
-#include "../qcommon/stringed_ingame.h"
+#include "qcommon/stringed_ingame.h"
 
 #define	CD_BASEDIR	"gamedata\\gamedata"
 #define	CD_EXE		"jamp.exe"
@@ -22,14 +22,6 @@
 #define MEM_THRESHOLD 128*1024*1024
 
 static char		sys_cmdline[MAX_STRING_CHARS];
-
-// enable this for executable checksumming
-#ifdef FINAL_BUILD
-#define SPANK_MONKEYS
-#endif
-static int	sys_monkeySpank;
-static int	sys_checksum;
-
 
 /*
 ==================
@@ -52,283 +44,6 @@ qboolean Sys_LowPhysicalMemory() {
 		return qtrue;
 	}
 	return (stat.dwTotalPhys <= MEM_THRESHOLD) ? qtrue : qfalse;
-}
-
-/*
-==================
-Sys_FunctionCmp
-==================
-*/
-int Sys_FunctionCmp(void *f1, void *f2) {
-
-	int i, j, l;
-	byte func_end[32] = {0xC3, 0x90, 0x90, 0x00};
-	byte *ptr, *ptr2;
-	byte *f1_ptr, *f2_ptr;
-
-	ptr = (byte *) f1;
-	if (*(byte *)ptr == 0xE9) {
-		//Com_Printf("f1 %p1 jmp %d\n", (int *) f1, *(int*)(ptr+1));
-		f1_ptr = (byte*)(((byte*)f1) + (*(int *)(ptr+1)) + 5);
-	}
-	else {
-		f1_ptr = ptr;
-	}
-	//Com_Printf("f1 ptr %p\n", f1_ptr);
-
-	ptr = (byte *) f2;
-	if (*(byte *)ptr == 0xE9) {
-		//Com_Printf("f2 %p jmp %d\n", (int *) f2, *(int*)(ptr+1));
-		f2_ptr = (byte*)(((byte*)f2) + (*(int *)(ptr+1)) + 5);
-	}
-	else {
-		f2_ptr = ptr;
-	}
-	//Com_Printf("f2 ptr %p\n", f2_ptr);
-
-#ifdef _DEBUG
-	sprintf((char *)func_end, "%c%c%c%c%c%c%c", 0x5F, 0x5E, 0x5B, 0x8B, 0xE5, 0x5D, 0xC3);
-#endif
-	for (i = 0; i < 1024; i++) {
-		for (j = 0; func_end[j]; j++) {
-			if (f1_ptr[i+j] != func_end[j])
-				break;
-		}
-		if (!func_end[j]) {
-			break;
-		}
-	}
-#ifdef _DEBUG
-	l = i + 7;
-#else
-	l = i + 2;
-#endif
-	//Com_Printf("function length = %d\n", l);
-
-	for (i = 0; i < l; i++) {
-		// check for a potential function call
-		if (*((byte *) &f1_ptr[i]) == 0xE8) {
-			// get the function pointers in case this really is a function call
-			ptr = (byte *) (((byte *) &f1_ptr[i]) + (*(int *) &f1_ptr[i+1])) + 5;
-			ptr2 = (byte *) (((byte *) &f2_ptr[i]) + (*(int *) &f2_ptr[i+1])) + 5;
-			// if it was a function call and both f1 and f2 call the same function
-			if (ptr == ptr2) {
-				i += 4;
-				continue;
-			}
-		}
-		if (f1_ptr[i] != f2_ptr[i])
-			return qfalse;
-	}
-	return qtrue;
-}
-
-/*
-==================
-Sys_FunctionCheckSum
-==================
-*/
-int Sys_FunctionCheckSum(void *f1) {
-
-	int i, j, l;
-	byte func_end[32] = {0xC3, 0x90, 0x90, 0x00};
-	byte *ptr;
-	byte *f1_ptr;
-
-	ptr = (byte *) f1;
-	if (*(byte *)ptr == 0xE9) {
-		//Com_Printf("f1 %p1 jmp %d\n", (int *) f1, *(int*)(ptr+1));
-		f1_ptr = (byte*)(((byte*)f1) + (*(int *)(ptr+1)) + 5);
-	}
-	else {
-		f1_ptr = ptr;
-	}
-	//Com_Printf("f1 ptr %p\n", f1_ptr);
-
-#ifdef _DEBUG
-	sprintf((char *)func_end, "%c%c%c%c%c%c%c", 0x5F, 0x5E, 0x5B, 0x8B, 0xE5, 0x5D, 0xC3);
-#endif
-	for (i = 0; i < 1024; i++) {
-		for (j = 0; func_end[j]; j++) {
-			if (f1_ptr[i+j] != func_end[j])
-				break;
-		}
-		if (!func_end[j]) {
-			break;
-		}
-	}
-#ifdef _DEBUG
-	l = i + 7;
-#else
-	l = i + 2;
-#endif
-	//Com_Printf("function length = %d\n", l);
-	return Com_BlockChecksum( f1_ptr, l );
-}
-
-/*
-==================
-Sys_MonkeyShouldBeSpanked
-==================
-*/
-int Sys_MonkeyShouldBeSpanked( void ) {
-	return sys_monkeySpank;
-}
-
-/*
-==================
-Sys_CodeInMemoryChecksum
-==================
-*/
-#define MakePtr( cast, ptr, addValue ) (cast)( (DWORD)(ptr) + (addValue) )
-
-int Sys_CodeInMemoryChecksum( void *codeBase ) {
-	PIMAGE_DOS_HEADER dosHeader;
-	PIMAGE_NT_HEADERS pNTHeader;
-	PIMAGE_SECTION_HEADER section;
-
-	dosHeader = (PIMAGE_DOS_HEADER)codeBase;
-	pNTHeader = MakePtr( PIMAGE_NT_HEADERS, dosHeader, dosHeader->e_lfanew );
-
-	// First, verify that the e_lfanew field gave us a reasonable
-	// pointer, then verify the PE signature.
-	if ( IsBadReadPtr(pNTHeader, sizeof(IMAGE_NT_HEADERS)) ||
-	     pNTHeader->Signature != IMAGE_NT_SIGNATURE )
-	{
-		//printf("Unhandled EXE type, or invalid .EXE\n");
-		return 0;
-	}
-	// first section oughta be the code section
-	section = (PIMAGE_SECTION_HEADER)(pNTHeader+1);
-	/*
-	// the name of the code section should be .text
-	if ( Q_stricmp( section->Name, ".text" ) ) {
-		return 0;
-	}
-	*/
-
-	return Com_BlockChecksum( ((byte *) codeBase) + section->VirtualAddress, section->SizeOfRawData );
-}
-
-/*
-==================
-Sys_ChecksumExe
-==================
-*/
-
-// make sure this string is unique in the executable
-//					   01234567890123
-byte *exeChecksumId = (unsigned char *)"q3monkeyid\0\0\0\0";
-
-void Sys_ChecksumExe( void *codeBase ) {
-	TCHAR szPathOrig[_MAX_PATH], szPathClone[_MAX_PATH];
-	STARTUPINFO si;
-	TCHAR szCmdLine[512];
-	HANDLE hfile, hProcessOrig;
-	PROCESS_INFORMATION pi;
-	int l, i, n;
-	FILE *f;
-	byte *buf, *ptr;
-
-	// Is this the original EXE or the clone EXE?
-	if ( Q_stricmp(__argv[1], "monkey") ) {
-		// Original EXE: Spawn clone EXE to delete this EXE
-
-		GetModuleFileName(NULL, szPathOrig, _MAX_PATH);
-		GetTempPath(_MAX_PATH, szPathClone);
-		GetTempFileName(szPathClone, __TEXT("Del"), 0, szPathClone); 
-		CopyFile(szPathOrig, szPathClone, FALSE);
-
-		// Open the clone EXE using FILE_FLAG_DELETE_ON_CLOSE
-		hfile = CreateFile(szPathClone, 0, FILE_SHARE_READ, NULL,   	                       
-								OPEN_EXISTING, FILE_FLAG_DELETE_ON_CLOSE, NULL);
-		// Spawn the clone EXE passing it our EXE's process handle
-		// and the full path name to the original EXE file.
-		hProcessOrig = OpenProcess(SYNCHRONIZE, TRUE,
-									GetCurrentProcessId());
-									wsprintf(szCmdLine, __TEXT("%s monkey %d %d \"%s\""), szPathClone,
-												sys_checksum, hProcessOrig, szPathOrig);
-		ZeroMemory(&si, sizeof(si));
-		si.cb = sizeof(si);
-		CreateProcess(NULL, szCmdLine, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi);
-		CloseHandle(hProcessOrig);
-		CloseHandle(hfile);
-	} else {
-		// Clone EXE: When original EXE terminates, overwrite it with a new one
-		sys_checksum = atoi( __argv[2] );
-		hProcessOrig = (HANDLE) atoi( __argv[3] );
-		WaitForSingleObject(hProcessOrig, INFINITE);
-		CloseHandle(hProcessOrig);
-		// open the original executable
-		f = fopen( __argv[4], "rb" );
-		if ( !f ) {
-			return;
-		}
-		fseek (f, 0, SEEK_END);
-		l = ftell (f);
-		fseek (f, 0, SEEK_SET);
-		buf = (unsigned char *)malloc(l);
-		if ( fread(buf, l, 1, f) != 1 ) {
-			return;
-		}
-		fclose(f);
-		// search for the exe name string, nice brute force
-		n = strlen((const char *)exeChecksumId);
-		for ( i = 0; i < l; i++ ) {
-			if ( !Q_strncmp((const char *)(buf + i), (const char *)exeChecksumId, n) ) {
-				break;
-			}
-		}
-		if ( i >= l ) {
-			return;
-		}
-		ptr = buf + i;
-		// write checksum into exe memory image
-		ptr[0] = (sys_checksum >> 24) & 0xFF;
-		ptr[1] = (sys_checksum >> 16) & 0xFF;
-		ptr[2] = (sys_checksum >>  8) & 0xFF;
-		ptr[3] = (sys_checksum >>  0) & 0xFF;
-		ptr[4] = ptr[5] = ptr[6] = ptr[7] = ptr[8] = ptr[9] = 0;
-		// write out new exe with checksum
-		f = fopen( __argv[4], "wb" );
-		if ( !f ) {
-			return;
-		}
-		if ( fwrite(buf, l, 1, f) != 1 ) {
-			return;
-		}
-		fclose(f);
-		free(buf);
-		// The system will delete the clone EXE automatically 
-		// because it was opened with FILE_FLAG_DELETE_ON_CLOSE
-	}
-	//
-	exit(0);
-}
-
-/*
-==================
-Sys_VerifyCodeChecksum
-==================
-*/
-void Sys_VerifyCodeChecksum( void *codeBase ) {
-	// NOTE: should not checksum code in debug mode because the memory image changes
-	//		 as soon as you set a break point!
-#if defined(SPANK_MONKEYS) && !defined(_DEBUG)
-	int exeChecksum;
-
-	// if the checksum is not yet stored in the executable
-	if ( exeChecksumId[4] != 0 ) {
-		// spawn another process that will replace this executable with one that has a checksum
-		Sys_ChecksumExe( codeBase );
-		return;
-	}
-
-	exeChecksum = (exeChecksumId[0] << 24) | (exeChecksumId[1] << 16) | (exeChecksumId[2] << 8) | exeChecksumId[3];
-	if ( exeChecksum != sys_checksum ) {
-		sys_monkeySpank = qtrue;
-	}
-#endif
 }
 
 /*
@@ -402,6 +117,14 @@ Sys_Print
 ==============
 */
 void Sys_Print( const char *msg ) {
+	// TTimo - prefix for text that shows up in console but not in notify
+	// backported from RTCW
+	if ( !Q_strncmp( msg, "[skipnotify]", 12 ) ) {
+		msg += 12;
+	}
+	if ( msg[0] == '*' ) {
+		msg += 1;
+	}
 	Conbuf_AppendText( msg );
 }
 
@@ -411,8 +134,13 @@ void Sys_Print( const char *msg ) {
 Sys_Mkdir
 ==============
 */
-void Sys_Mkdir( const char *path ) {
-	_mkdir (path);
+qboolean Sys_Mkdir( const char *path ) {
+	if( !CreateDirectory( path, NULL ) )
+	{
+		if( GetLastError( ) != ERROR_ALREADY_EXISTS )
+			return qfalse;
+	}
+	return qtrue;
 }
 
 /*
@@ -814,67 +542,45 @@ void * QDECL Sys_LoadDll( const char *name, int (QDECL **entryPoint)(int, ...),
 	HINSTANCE	libHandle;
 	void	(QDECL *dllEntry)( int (QDECL *syscallptr)(int, ...) );
 	char	*basepath;
+	char	*homepath;
 	char	*cdpath;
 	char	*gamedir;
 	char	*fn;
-#ifdef NDEBUG
-	int		timestamp;
-  int   ret;
-#endif
 	char	filename[MAX_QPATH];
 
 	Com_sprintf( filename, sizeof( filename ), "%sx86.dll", name );
-
-#ifdef NDEBUG
-	timestamp = Sys_Milliseconds();
-//	if( ((timestamp - lastWarning) > (5 * 60000)) && !Cvar_VariableIntegerValue( "dedicated" )
-//		&& !Cvar_VariableIntegerValue( "com_blindlyLoadDLLs" ) ) {
-	if (0) {
-		if (FS_FileExists(filename)) {
-			lastWarning = timestamp;
-			ret = MessageBoxEx( NULL, "You are about to load a .DLL executable that\n"
-				  "has not been verified for use with Quake III Arena.\n"
-				  "This type of file can compromise the security of\n"
-				  "your computer.\n\n"
-				  "Select 'OK' if you choose to load it anyway.",
-				  "Security Warning", MB_OKCANCEL | MB_ICONEXCLAMATION | MB_DEFBUTTON2 | MB_TOPMOST | MB_SETFOREGROUND,
-				  MAKELANGID( LANG_NEUTRAL, SUBLANG_DEFAULT ) );
-			if( ret != IDOK ) {
-				return NULL;
-			}
-		}
-	}
-#endif
 
 	if (!Sys_UnpackDLL(filename))
 	{
 		return NULL;
 	}
 
-// rjr disable for final release #ifndef NDEBUG
 	libHandle = LoadLibrary( filename );
 	if ( !libHandle ) {
-//#endif
-	basepath = Cvar_VariableString( "fs_basepath" );
-	cdpath = Cvar_VariableString( "fs_cdpath" );
-	gamedir = Cvar_VariableString( "fs_game" );
+		basepath = Cvar_VariableString( "fs_basepath" );
+		homepath = Cvar_VariableString( "fs_homepath" );
+		cdpath = Cvar_VariableString( "fs_cdpath" );
+		gamedir = Cvar_VariableString( "fs_game" );
 
-	fn = FS_BuildOSPath( basepath, gamedir, filename );
-	libHandle = LoadLibrary( fn );
-
-	if ( !libHandle ) {
-		if( cdpath[0] ) {
-			fn = FS_BuildOSPath( cdpath, gamedir, filename );
-			libHandle = LoadLibrary( fn );
-		}
+		fn = FS_BuildOSPath( basepath, gamedir, filename );
+		libHandle = LoadLibrary( fn );
 
 		if ( !libHandle ) {
-			return NULL;
+			if( homepath[0] ) {
+				fn = FS_BuildOSPath( homepath, gamedir, filename );
+				libHandle = LoadLibrary( fn );
+			}
+			if ( !libHandle ) {
+				if( cdpath[0] ) {
+					fn = FS_BuildOSPath( cdpath, gamedir, filename );
+					libHandle = LoadLibrary( fn );
+				}
+				if ( !libHandle ) {
+					return NULL;
+				}
+			}
 		}
 	}
-//#ifndef NDEBUG
-	}
-//#endif
 
 	dllEntry = ( void (QDECL *)( int (QDECL *)( int, ... ) ) )GetProcAddress( libHandle, "dllEntry" ); 
 	*entryPoint = (int (QDECL *)(int,...))GetProcAddress( libHandle, "vmMain" );
@@ -1178,24 +884,6 @@ be freed by the game later.
 void Sys_QueEvent( int time, sysEventType_t type, int value, int value2, int ptrLength, void *ptr ) {
 	sysEvent_t	*ev;
 
-#ifdef _XBOX
-	if(ClientManager::Shared().splitScreenMode == qtrue)
-	{
-		ev = &ClientManager::ActiveClient().eventQue[ ClientManager::ActiveClient().eventHead & MASK_QUED_EVENTS ];
-		if ( ClientManager::ActiveClient().eventHead - ClientManager::ActiveClient().eventTail >= MAX_QUED_EVENTS ) {
-			Com_Printf("Sys_QueEvent: overflow\n");
-			// we are discarding an event, but don't leak memory
-			if ( ev->evPtr ) {
-				Z_Free( ev->evPtr );
-			}
-			ClientManager::ActiveClient().eventTail++;
-		}
-
-		ClientManager::ActiveClient().eventHead++;
-	}
-	else
-	{
-#endif // _XBOX
 	ev = &eventQue[ eventHead & MASK_QUED_EVENTS ];
 	if ( eventHead - eventTail >= MAX_QUED_EVENTS ) {
 		Com_Printf("Sys_QueEvent: overflow\n");
@@ -1207,10 +895,6 @@ void Sys_QueEvent( int time, sysEventType_t type, int value, int value2, int ptr
 	}
 
 	eventHead++;
-
-#ifdef _XBOX
-	}
-#endif 
 
 	if ( time == 0 ) {
 		time = Sys_Milliseconds();
@@ -1238,25 +922,10 @@ sysEvent_t Sys_GetEvent( void ) {
 	netadr_t	adr;
 
 	// return if we have data
-#ifdef _XBOX
-	if(ClientManager::Shared().splitScreenMode == qtrue)
-	{
-		if ( ClientManager::ActiveClient().eventHead > ClientManager::ActiveClient().eventTail ) 
-		{
-			ClientManager::ActiveClient().eventTail++;
-			return ClientManager::ActiveClient().eventQue[ ( ClientManager::ActiveClient().eventTail - 1 ) & MASK_QUED_EVENTS ];
-		}
-	}
-	else
-	{
-#endif // _XBOX
 	if ( eventHead > eventTail ) {
 		eventTail++;
 		return eventQue[ ( eventTail - 1 ) & MASK_QUED_EVENTS ];
 	}
-#ifdef _XBOX
-	}
-#endif
 
 	// pump the message loop
 	while (PeekMessage (&msg, NULL, 0, 0, PM_NOREMOVE)) {
@@ -1299,25 +968,10 @@ sysEvent_t Sys_GetEvent( void ) {
 	}
 
 	// return if we have data
-#ifdef _XBOX
-	if(ClientManager::Shared().splitScreenMode == qtrue)
-	{
-		if ( ClientManager::ActiveClient().eventHead > ClientManager::ActiveClient().eventTail ) 
-		{
-			ClientManager::ActiveClient().eventTail++;
-			return ClientManager::ActiveClient().eventQue[ ( ClientManager::ActiveClient().eventTail - 1 ) & MASK_QUED_EVENTS ];
-		}
-	}
-	else
-	{
-#endif // _XBOX
 	if ( eventHead > eventTail ) {
 		eventTail++;
 		return eventQue[ ( eventTail - 1 ) & MASK_QUED_EVENTS ];
 	}
-#ifdef _XBOX
-	}
-#endif
 
 	// create an empty event to return
 
@@ -1581,9 +1235,6 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
         return 0;
 	}
 
-	sys_checksum = Sys_CodeInMemoryChecksum( hInstance );
-	Sys_VerifyCodeChecksum( hInstance );
-
 	g_wv.hInstance = hInstance;
 	Q_strncpyz( sys_cmdline, lpCmdLine, sizeof( sys_cmdline ) );
 
@@ -1617,12 +1268,6 @@ int WINAPI WinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	if ( !com_dedicated->integer && !com_viewlog->integer ) {
 		Sys_ShowConsole( 0, qfalse );
 	}
-
-#ifdef _DEBUG
-	if ( sys_monkeySpank ) {
-		Cvar_Set("cl_trn", "666");
-	}
-#endif
 
     // main game loop
 	while( 1 ) {

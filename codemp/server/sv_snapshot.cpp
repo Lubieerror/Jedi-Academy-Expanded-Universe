@@ -1,12 +1,7 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 #include "server.h"
-
-#ifdef _XBOX
-#include "../cgame/cg_local.h"
-#include "../client/cl_data.h"
-#endif
 
 
 /*
@@ -98,11 +93,6 @@ static void SV_EmitPacketEntities( clientSnapshot_t *from, clientSnapshot_t *to,
 	MSG_WriteBits( msg, (MAX_GENTITIES-1), GENTITYNUM_BITS );	// end of packetentities
 }
 
-
-// Which client are we sending voice info about this frame?
-static int curVoiceClient = 0;
-static short curVoiceData[3];	// Lo-res coords
-static bool bSendCurVoiceClient ;
 
 
 /*
@@ -216,15 +206,6 @@ static void SV_WriteSnapshotToClient( client_t *client, msg_t *msg ) {
 	// delta encode the entities
 	SV_EmitPacketEntities (oldframe, frame, msg);
 
-	// All clients need to know every other client's position so they can do voice
-	// proximity code. But we don't want to use much bandwidth, so we send one client's
-	// position per snapshot, using only four bytes. This is computed outside of here:
-	if( bSendCurVoiceClient )
-	{
-		MSG_WriteByte( msg, svc_plyrPos0 + curVoiceClient );	// svc_plyrPos0 .. svc_PlyrPos9
-		MSG_WriteData( msg, curVoiceData, sizeof(curVoiceData) );
-	}
-
 	// padding for rate debugging
 	if ( sv_padPackets->integer ) {
 		for ( i = 0 ; i < sv_padPackets->integer ; i++ ) {
@@ -326,13 +307,8 @@ static void SV_AddEntitiesVisibleFromPoint( vec3_t origin, clientSnapshot_t *fra
 	int		clientarea, clientcluster;
 	int		leafnum;
 	int		c_fullsend;
-#ifdef _XBOX
-	const byte *clientpvs;
-	const byte *bitvector;
-#else
 	byte	*clientpvs;
 	byte	*bitvector;
-#endif
 	vec3_t	difference;
 	float	length, radius;
 
@@ -444,26 +420,16 @@ static void SV_AddEntitiesVisibleFromPoint( vec3_t origin, clientSnapshot_t *fra
 				continue;
 			}
 			l = 0;
-#ifdef _XBOX
-			if(bitvector) {
-#endif
 			for ( i=0 ; i < svEnt->numClusters ; i++ ) {
 				l = svEnt->clusternums[i];
 				if ( bitvector[l >> 3] & (1 << (l&7) ) ) {
 					break;
 				}
 			}
-#ifdef _XBOX
-			}
-#endif
 
 			// if we haven't found it to be visible,
 			// check overflow clusters that coudln't be stored
-#ifdef _XBOX
-			if ( bitvector && i == svEnt->numClusters ) {
-#else
 			if ( i == svEnt->numClusters ) {
-#endif
 				if ( svEnt->lastCluster ) {
 					for ( ; l <= svEnt->lastCluster ; l++ ) {
 						if ( bitvector[l >> 3] & (1 << (l&7) ) ) {
@@ -507,10 +473,6 @@ static void SV_AddEntitiesVisibleFromPoint( vec3_t origin, clientSnapshot_t *fra
 					}
 				}
 				SV_AddEntitiesVisibleFromPoint( ent->s.origin2, frame, eNums, qtrue );
-#ifdef _XBOX
-				//Must get clientpvs again since above call destroyed it.
-			clientpvs = CM_ClusterPVS (clientcluster);
-#endif
 			}
 		}
 	}
@@ -677,9 +639,7 @@ void SV_SendMessageToClient( msg_t *msg, client_t *client ) {
 	{
 		// send additional message fragments if the last message
 		// was too large to send at once
-#ifndef FINAL_BUILD
 		Com_Printf ("[ISM]SV_SendClientGameState() [1] for %s, writing out old fragments\n", client->name);
-#endif
 		SV_Netchan_TransmitNextFragment(&client->netchan);
 	}
 
@@ -693,8 +653,8 @@ void SV_SendMessageToClient( msg_t *msg, client_t *client ) {
 
 	// set nextSnapshotTime based on rate and requested number of updates
 
-	// local clients get snapshots every frame when paused
-	if ( client->netchan.remoteAddress.type == NA_LOOPBACK || !logged_on ) { //Sys_IsLANAddress (client->netchan.remoteAddress) ) {
+	// local clients get snapshots every frame
+	if ( client->netchan.remoteAddress.type == NA_LOOPBACK || Sys_IsLANAddress (client->netchan.remoteAddress) ) {
 		client->nextSnapshotTime = svs.time - 1;
 		return;
 	}
@@ -717,11 +677,7 @@ void SV_SendMessageToClient( msg_t *msg, client_t *client ) {
 		// a gigantic connection message may have already put the nextSnapshotTime
 		// more than a second away, so don't shorten it
 		// do shorten if client is downloading
-#ifdef _XBOX	// No downloads on Xbox
-		if ( client->nextSnapshotTime < svs.time + 1000 ) {
-#else
 		if ( !*client->downloadName && client->nextSnapshotTime < svs.time + 1000 ) {
-#endif
 			client->nextSnapshotTime = svs.time + 1000;
 		}
 	}
@@ -766,9 +722,7 @@ void SV_SendClientSnapshot( client_t *client ) {
 		{
 			// send additional message fragments if the last message
 			// was too large to send at once
-#ifndef FINAL_BUILD
 			Com_Printf ("[ISM]SV_SendClientGameState() [1] for %s, writing out old fragments\n", client->name);
-#endif
 			SV_Netchan_TransmitNextFragment(&client->netchan);
 		}
 
@@ -807,9 +761,7 @@ void SV_SendClientSnapshot( client_t *client ) {
 	SV_WriteSnapshotToClient( client, &msg );
 
 	// Add any download data if the client is downloading
-#ifndef _XBOX	// No downloads on Xbox
 	SV_WriteDownloadToClient( client, &msg );
-#endif
 
 	// check for overflow
 	if ( msg.overflowed ) {
@@ -830,34 +782,8 @@ void SV_SendClientMessages( void ) {
 	int			i;
 	client_t	*c;
 
-	// Move our voice client update to the next client:
-	curVoiceClient = (curVoiceClient + 1) % sv_maxclients->integer;
-	if( svs.clients[curVoiceClient].state != CS_ACTIVE )
-	{
-		// Don't waste bandwidth:
-		bSendCurVoiceClient = false;
-	}
-	else
-	{
-		// Make sure we send this client's position:
-		bSendCurVoiceClient = true;
-
-		// Get the entity
-		sharedEntity_t *ent = SV_GentityNum( curVoiceClient );
-
-		// Scale their origin down to -1..1
-		vec3_t vcOrigin;
-		VectorScale( ent->playerState->origin, 1.0f / MAX_WORLD_COORD, vcOrigin );
-		curVoiceData[0] = vcOrigin[0] * 32767;
-		curVoiceData[1] = vcOrigin[1] * 32767;
-		curVoiceData[2] = vcOrigin[2] * 32767;
-	}
-
 	// send a message to each connected client
 	for (i=0, c = svs.clients ; i < sv_maxclients->integer ; i++, c++) {
-#ifdef _XBOX
-		ClientManager::ActivateClient(i);
-#endif
 		if (!c->state) {
 			continue;		// not connected
 		}

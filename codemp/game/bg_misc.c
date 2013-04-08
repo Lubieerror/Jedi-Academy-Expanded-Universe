@@ -2,7 +2,7 @@
 //
 // bg_misc.c -- both games misc functions, all completely stateless
 
-#include "q_shared.h"
+#include "qcommon/q_shared.h"
 #include "bg_public.h"
 #include "bg_strap.h"
 
@@ -11,25 +11,14 @@
 #endif
 
 #ifdef UI_EXPORTS
-#include "../ui/ui_local.h"
+#include "ui/ui_local.h"
 #endif
 
 #ifndef UI_EXPORTS
 #ifndef QAGAME
-#include "../cgame/cg_local.h"
+#include "cgame/cg_local.h"
 #endif
 #endif
-
-#ifdef _XBOX
-extern void *Z_Malloc(int iSize, memtag_t eTag, qboolean bZeroit, int iAlign);
-extern void Z_Free(void *pvAddress);
-#endif
-
-#ifdef QAGAME
-extern void Q3_SetParm (int entID, int parmNum, const char *parmValue);
-#endif
-
-#include "../namespace_begin.h"
 
 const char *bgToggleableSurfaces[BG_NUM_TOGGLEABLE_SURFACES] = 
 {
@@ -309,6 +298,10 @@ int WeaponAttackAnim[WP_NUM_WEAPONS] =
 	BOTH_THERMAL_THROW,//WP_THERMAL,
 	BOTH_ATTACK3,//BOTH_ATTACK11,//WP_TRIP_MINE,
 	BOTH_ATTACK3,//BOTH_ATTACK12,//WP_DET_PACK,
+	#ifndef BASE_COMPAT
+		//JAC: Raven forgot the Concussion's firing animation
+		BOTH_ATTACK3,//WP_CONCUSSION,
+	#endif // BASE_COMPAT
 	BOTH_ATTACK2,//WP_BRYAR_OLD,
 
 	//NOT VALID (e.g. should never really be used):
@@ -331,98 +324,6 @@ qboolean BG_FileExists(const char *fileName)
 
 	return qfalse;
 }
-
-#ifndef UI_EXPORTS //don't need this stuff in the ui
-
-// Following functions don't need to be in namespace, they're already
-// different per-module
-#include "../namespace_end.h"
-
-#ifdef QAGAME
-char *G_NewString( const char *string );
-#else
-char *CG_NewString( const char *string );
-#endif
-
-#include "../namespace_begin.h"
-
-/*
-===============
-BG_ParseField
-
-Takes a key/value pair and sets the binary values
-in a gentity/centity/whatever the hell you want
-===============
-*/
-
-void BG_ParseField( BG_field_t *l_fields, const char *key, const char *value, byte *ent )
-{
-	BG_field_t	*f;
-	byte	*b;
-	float	v;
-	vec3_t	vec;
-
-	for ( f=l_fields ; f->name ; f++ ) {
-		if ( !Q_stricmp(f->name, key) ) {
-			// found it
-			b = (byte *)ent;
-
-			switch( f->type ) {
-			case F_LSTRING:
-#ifdef QAGAME
-				*(char **)(b+f->ofs) = G_NewString (value);
-#else
-				*(char **)(b+f->ofs) = CG_NewString (value);
-#endif
-				break;
-			case F_VECTOR:
-				sscanf (value, "%f %f %f", &vec[0], &vec[1], &vec[2]);
-				((float *)(b+f->ofs))[0] = vec[0];
-				((float *)(b+f->ofs))[1] = vec[1];
-				((float *)(b+f->ofs))[2] = vec[2];
-				break;
-			case F_INT:
-				*(int *)(b+f->ofs) = atoi(value);
-				break;
-			case F_FLOAT:
-				*(float *)(b+f->ofs) = atof(value);
-				break;
-			case F_ANGLEHACK:
-				v = atof(value);
-				((float *)(b+f->ofs))[0] = 0;
-				((float *)(b+f->ofs))[1] = v;
-				((float *)(b+f->ofs))[2] = 0;
-				break;
-#ifdef QAGAME
-			case F_PARM1:
-			case F_PARM2:
-			case F_PARM3:
-			case F_PARM4:
-			case F_PARM5:
-			case F_PARM6:
-			case F_PARM7:
-			case F_PARM8:
-			case F_PARM9:
-			case F_PARM10:
-			case F_PARM11:
-			case F_PARM12:
-			case F_PARM13:
-			case F_PARM14:
-			case F_PARM15:
-			case F_PARM16:
-				Q3_SetParm( ((gentity_t *)(ent))->s.number, (f->type - F_PARM1), (char *) value );
-				break;
-#endif
-			default:
-			case F_IGNORE:
-				break;
-			}
-			return;
-		}
-	}
-}
-
-#endif
 
 /*
 ================
@@ -449,28 +350,26 @@ qboolean BG_LegalizedForcePowers(char *powerOut, int maxRank, qboolean freeSaber
 	int countDown = 0;
 	
 	int final_Side;
-	int final_Powers[NUM_FORCE_POWERS];
+	int final_Powers[NUM_FORCE_POWERS] = {0};
 
-	if (powerLen >= 128)
+	if ( powerLen >= 128 )
 	{ //This should not happen. If it does, this is obviously a bogus string.
 		//They can have this string. Because I said so.
-		strcpy(powerBuf, "7-1-032330000000001333");
+		Q_strncpyz( powerBuf, DEFAULT_FORCEPOWERS, sizeof( powerBuf ) );
 		maintainsValidity = qfalse;
 	}
 	else
-	{
-		strcpy(powerBuf, powerOut); //copy it as the original
-	}
+		Q_strncpyz( powerBuf, powerOut, sizeof( powerBuf ) ); //copy it as the original
 
 	//first of all, print the max rank into the string as the rank
-	strcpy(powerOut, va("%i-", maxRank));
+	Q_strncpyz( powerOut, va( "%i-", maxRank ), 128 );
 
-	while (i < 128 && powerBuf[i] && powerBuf[i] != '-')
+	while (i < sizeof( powerBuf ) && powerBuf[i] && powerBuf[i] != '-')
 	{
 		i++;
 	}
 	i++;
-	while (i < 128 && powerBuf[i] && powerBuf[i] != '-')
+	while (i < sizeof( powerBuf ) && powerBuf[i] && powerBuf[i] != '-')
 	{
 		readBuf[c] = powerBuf[i];
 		c++;
@@ -501,7 +400,8 @@ qboolean BG_LegalizedForcePowers(char *powerOut, int maxRank, qboolean freeSaber
 	//Now we have established a valid rank, and a valid side.
 	//Read the force powers in, and cut them down based on the various rules supplied.
 	c = 0;
-	while (i < 128 && powerBuf[i] && powerBuf[i] != '\n' && c < NUM_FORCE_POWERS)
+	while (i < sizeof( powerBuf ) && powerBuf[i] && powerBuf[i] != '\n' && powerBuf[i] != '\r'
+		&& powerBuf[i] >= '0' && powerBuf[i] <= '3' && c < NUM_FORCE_POWERS)
 	{
 		readBuf[0] = powerBuf[i];
 		readBuf[1] = 0;
@@ -665,26 +565,18 @@ qboolean BG_LegalizedForcePowers(char *powerOut, int maxRank, qboolean freeSaber
 	if (freeSaber)
 	{
 		if (final_Powers[FP_SABER_OFFENSE] < 1)
-		{
 			final_Powers[FP_SABER_OFFENSE] = 1;
-		}
 		if (final_Powers[FP_SABER_DEFENSE] < 1)
-		{
 			final_Powers[FP_SABER_DEFENSE] = 1;
-		}
 	}
 	if (final_Powers[FP_LEVITATION] < 1)
-	{
 		final_Powers[FP_LEVITATION] = 1;
-	}
 
 	i = 0;
 	while (i < NUM_FORCE_POWERS)
 	{
 		if (final_Powers[i] > FORCE_LEVEL_3)
-		{
 			final_Powers[i] = FORCE_LEVEL_3;
-		}
 		i++;
 	}
 
@@ -693,17 +585,11 @@ qboolean BG_LegalizedForcePowers(char *powerOut, int maxRank, qboolean freeSaber
 	  //things work for the case of all powers disabled.
 	  //If jump is disabled, down-cap it to level 1. Otherwise don't do a thing.
 		if (fpDisabled & (1 << FP_LEVITATION))
-		{
 			final_Powers[FP_LEVITATION] = 1;
-		}
 		if (fpDisabled & (1 << FP_SABER_OFFENSE))
-		{
 			final_Powers[FP_SABER_OFFENSE] = 3;
-		}
 		if (fpDisabled & (1 << FP_SABER_DEFENSE))
-		{
 			final_Powers[FP_SABER_DEFENSE] = 3;
-		}
 	}
 
 	if (final_Powers[FP_SABER_OFFENSE] < 1)
@@ -721,7 +607,7 @@ qboolean BG_LegalizedForcePowers(char *powerOut, int maxRank, qboolean freeSaber
 	c = 0;
 	while (c < NUM_FORCE_POWERS)
 	{
-		strcpy(readBuf, va("%i", final_Powers[c]));
+		Q_strncpyz(readBuf, va( "%i", final_Powers[c] ), sizeof( readBuf ) );
 		powerOut[i] = readBuf[0];
 		c++;
 		i++;
@@ -2204,7 +2090,8 @@ qboolean BG_CanItemBeGrabbed( int gametype, const entityState_t *ent, const play
 		{//force powers and saber only
 			if ( item->giType != IT_TEAM //not a flag
 				&& item->giType != IT_ARMOR//not shields
-				&& (item->giType != IT_WEAPON || item->giTag != WP_SABER)//not a saber
+				&& (item->giType != IT_WEAPON 
+									|| item->giTag != WP_SABER)//not a saber
 				&& (item->giType != IT_HOLDABLE || item->giTag != HI_SEEKER)//not a seeker
 				&& (item->giType != IT_POWERUP || item->giTag == PW_YSALAMIRI) )//not a force pick-up
 			{
@@ -2220,12 +2107,10 @@ qboolean BG_CanItemBeGrabbed( int gametype, const entityState_t *ent, const play
 				return qfalse;
 			}
 		}
-/*
 		if ( ps->isJediMaster && item && (item->giType == IT_WEAPON || item->giType == IT_AMMO))
 		{//jedi master cannot pick up weapons
 			return qfalse;
 		}
-*/
 		if ( ps->duelInProgress )
 		{ //no picking stuff up while in a duel, no matter what the type is
 			return qfalse;
@@ -2250,7 +2135,8 @@ qboolean BG_CanItemBeGrabbed( int gametype, const entityState_t *ent, const play
 		if (item->giTag == WP_THERMAL || item->giTag == WP_TRIP_MINE || item->giTag == WP_DET_PACK)
 		{ //check to see if full on ammo for this, if so, then..
 			int ammoIndex = weaponData[item->giTag].ammoIndex;
-			if (ps->ammo[ammoIndex] >= ammoData[ammoIndex].max)
+			//JAC: Only restrict pickups on full ammo if the player already has this weapon.
+			if (ps->ammo[ammoIndex] >= ammoData[ammoIndex].max && ps->stats[STAT_WEAPONS] & ( 1 << item->giTag ) )
 			{ //don't need it
 				return qfalse;
 			}
@@ -2333,10 +2219,8 @@ qboolean BG_CanItemBeGrabbed( int gametype, const entityState_t *ent, const play
         case IT_BAD:
             Com_Error( ERR_DROP, "BG_CanItemBeGrabbed: IT_BAD" );
         default:
-#ifndef Q3_VM
 #ifndef NDEBUG // bk0001204
           Com_Printf("BG_CanItemBeGrabbed: unknown enum %d\n", item->giType );
-#endif
 #endif
          break;
 	}
@@ -2392,7 +2276,7 @@ void BG_EvaluateTrajectory( const trajectory_t *tr, int atTime, vec3_t result ) 
 		}
 		else
 		{//FIXME: maybe scale this somehow?  So that it starts out faster and stops faster?
-			deltaTime = tr->trDuration*0.001f*((float)cos( DEG2RAD(90.0f - (90.0f*((float)atTime-tr->trTime)/(float)tr->trDuration)) ));
+			deltaTime = tr->trDuration*0.001f*((float)cos( DEG2RAD(90.0f - (90.0f*((float)(atTime-tr->trTime))/(float)tr->trDuration)) ));
 		}
 		VectorMA( tr->trBase, deltaTime, tr->trDelta, result );
 		break;
@@ -2449,7 +2333,7 @@ void BG_EvaluateTrajectoryDelta( const trajectory_t *tr, int atTime, vec3_t resu
 			VectorClear( result );
 			return;
 		}
-		deltaTime = tr->trDuration*0.001f*((float)cos( DEG2RAD(90.0f - (90.0f*((float)atTime-tr->trTime)/(float)tr->trDuration)) ));
+		deltaTime = tr->trDuration*0.001f*((float)cos( DEG2RAD(90.0f - (90.0f*((float)(atTime-tr->trTime))/(float)tr->trDuration)) ));
 		VectorScale( tr->trDelta, deltaTime, result );
 		break;
 	case TR_GRAVITY:
@@ -2458,7 +2342,11 @@ void BG_EvaluateTrajectoryDelta( const trajectory_t *tr, int atTime, vec3_t resu
 		result[2] -= DEFAULT_GRAVITY * deltaTime;		// FIXME: local gravity...
 		break;
 	default:
-		Com_Error( ERR_DROP, "BG_EvaluateTrajectoryDelta: unknown trType: %i", tr->trTime );
+#ifdef QAGAME
+		Com_Error( ERR_DROP, "BG_EvaluateTrajectoryDelta: [GAME SIDE] unknown trType: %i", tr->trType );
+#else
+		Com_Error( ERR_DROP, "BG_EvaluateTrajectoryDelta: [CLIENTGAME SIDE] unknown trType: %i", tr->trType );
+#endif
 		break;
 	}
 }
@@ -2587,8 +2475,10 @@ char *eventnames[] = {
 	"EV_DEATH3",
 	"EV_OBITUARY",
 
-	"EV_POWERUP_QUAD",
-	"EV_POWERUP_BATTLESUIT",
+	#ifdef BASE_COMPAT
+		"EV_POWERUP_QUAD",
+		"EV_POWERUP_BATTLESUIT",
+	#endif // BASE_COMPAT
 	//"EV_POWERUP_REGEN",
 
 	"EV_FORCE_DRAINED",
@@ -2621,14 +2511,7 @@ char *eventnames[] = {
 	"EV_STOPLOOPINGSOUND",
 	"EV_STARTLOOPINGSOUND",
 	"EV_TAUNT",
-
-	"EV_TAUNT_YES",
-	"EV_TAUNT_NO",
-	"EV_TAUNT_FOLLOWME",
-	"EV_TAUNT_GETFLAG",
-	"EV_TAUNT_GUARDBASE",
-	"EV_TAUNT_PATROL",
-
+//fixme, added a bunch that aren't here!
 };
 
 /*
@@ -2700,6 +2583,8 @@ void BG_TouchJumpPad( playerState_t *ps, entityState_t *jumppad ) {
 	ps->jumppad_frame = ps->pmove_framecount;
 	// give the player the velocity from the jumppad
 	VectorCopy( jumppad->origin2, ps->velocity );
+	// fix: no more force draining after bouncing the jumppad
+	ps->fd.forcePowersActive &= ~(1<<FP_LEVITATION);
 }
 
 /*
@@ -2752,7 +2637,11 @@ int BG_EmplacedView(vec3_t baseAngles, vec3_t angles, float *newYaw, float const
 //I don't much care for hardcoded strings, but this seems the best way to go.
 qboolean BG_IsValidCharacterModel(const char *modelName, const char *skinName)
 {
-	if (!Q_stricmp(modelName, "kyle"))
+	if (!Q_stricmp(skinName, "menu"))
+	{
+		return qfalse;
+	}
+	else if (!Q_stricmp(modelName, "kyle"))
 	{
 		if (!Q_stricmp(skinName, "fpls"))
 		{
@@ -2772,16 +2661,7 @@ qboolean BG_IsValidCharacterModel(const char *modelName, const char *skinName)
 
 qboolean BG_ValidateSkinForTeam( const char *modelName, char *skinName, int team, float *colors )
 {
-	char trunc[6];
-	int i = 0;
-	while (i < 5)
-	{
-		trunc[i] = modelName[i];
-		i++;
-	}
-	trunc[i] = 0;
-
-	if (!Q_stricmp(trunc, "jedi_"))
+	if (!Q_stricmpn(modelName, "jedi_",5))
 	{ //argh, it's a custom player skin!
 		if (team == TEAM_RED && colors)
 		{
@@ -3016,10 +2896,9 @@ void BG_PlayerStateToEntityState( playerState_t *ps, entityState_t *s, qboolean 
 
 	VectorCopy(ps->lastHitLoc, s->origin2);
 
-//	s->isJediMaster = ps->isJediMaster;
+	s->isJediMaster = ps->isJediMaster;
 
-//	s->time2 = ps->holocronBits;
-	s->time2 = 0;	// ???
+	s->time2 = ps->holocronBits;
 
 	s->fireflag = ps->fd.saberAnimLevel;
 
@@ -3169,10 +3048,9 @@ void BG_PlayerStateToEntityStateExtraPolate( playerState_t *ps, entityState_t *s
 
 	VectorCopy(ps->lastHitLoc, s->origin2);
 
-//	s->isJediMaster = ps->isJediMaster;
+	s->isJediMaster = ps->isJediMaster;
 
-//	s->time2 = ps->holocronBits;
-	s->time2 = 0;	// ???
+	s->time2 = ps->holocronBits;
 
 	s->fireflag = ps->fd.saberAnimLevel;
 
@@ -3238,91 +3116,6 @@ int BG_ModelCache(const char *modelName, const char *skinName)
 	return trap_R_RegisterModel(modelName);
 #endif
 }
-
-#ifdef _XBOX	// Hacky BG_Alloc replacement
-
-// This file claims to be stateless. Yeah, right. Regardless, I'm not setting
-// aside 5.5 MB of static buffers for this crap. Let's use Z_Malloc. Of course,
-// we still need to deal with the fact that any code using BG_Malloc is almost
-// certainly leaking memory like a sieve.
-
-// Dave addendum - TAG_BG_ALLOC is entirely freed when the level starts.
-void *BG_Alloc ( int size )
-{
-	return Z_Malloc(size, TAG_BG_ALLOC, qfalse, 4);
-}
-
-void *BG_AllocUnaligned ( int size )
-{
-	// Ignore the unaligned hint, this function isn't called anyway
-	return Z_Malloc(size, TAG_BG_ALLOC, qfalse, 4);
-}
-
-// Because the interface to BG_TempAlloc/BG_TempFree is brain-dead, we need
-// to remember our last few temporary allocations performed.
-#define MAX_TEMP_ALLOCS	3
-static void	*tempAllocPointers[MAX_TEMP_ALLOCS] = { 0 };
-static int	tempAllocSizes[MAX_TEMP_ALLOCS] = { 0 };
-
-void *BG_TempAlloc( int size )
-{
-	int i;
-
-	// Do we have a free spot?
-	for (i = 0; i < MAX_TEMP_ALLOCS; ++i)
-		if (!tempAllocPointers[i])
-			break;
-
-	if (i == MAX_TEMP_ALLOCS)
-	{
-		assert(!"No space for TempAlloc -> Increase MAX_TEMP_ALLOCS");
-		return NULL;
-	}
-
-	tempAllocPointers[i] = Z_Malloc(size, TAG_TEMP_WORKSPACE, qfalse, 4);
-	tempAllocSizes[i] = size;
-
-	return tempAllocPointers[i];
-}
-
-void BG_TempFree( int size )
-{
-	int i;
-
-	// Find the allocation
-	for (i = MAX_TEMP_ALLOCS - 1; i >= 0; --i)
-		if (tempAllocPointers[i] && (tempAllocSizes[i] == size))
-			break;
-
-	if (i < 0)
-	{
-		assert(!"BG_TempFree doesn't match a call to BG_TempAlloc");
-		return;
-	}
-
-	Z_Free(tempAllocPointers[i]);
-	tempAllocPointers[i] = 0;
-	tempAllocSizes[i] = 0;
-
-	return;
-}
-
-char *BG_StringAlloc ( const char *source )
-{
-	char *dest;
-
-	dest = (char *) BG_Alloc ( strlen ( source ) + 1 );
-	strcpy ( dest, source );
-	return dest;
-}
-
-qboolean BG_OutOfMemory ( void )
-{
-	// Never called
-	return qfalse;
-}
-
-#else // _XBOX
 
 #ifdef QAGAME
 #define MAX_POOL_SIZE	3000000 //1024000
@@ -3398,10 +3191,8 @@ void BG_TempFree( int size )
 
 char *BG_StringAlloc ( const char *source )
 {
-	char *dest;
-
-	dest = BG_Alloc ( strlen ( source ) + 1 );
-	strcpy ( dest, source );
+	char *dest = (char*)BG_Alloc( strlen ( source ) + 1 );
+	strcpy( dest, source );
 	return dest;
 }
 
@@ -3409,7 +3200,3 @@ qboolean BG_OutOfMemory ( void )
 {
 	return bg_poolSize >= MAX_POOL_SIZE;
 }
-
-#endif // _XBOX && QAGAME
-
-#include "../namespace_end.h"

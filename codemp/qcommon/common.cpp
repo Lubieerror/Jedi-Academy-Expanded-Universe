@@ -1,21 +1,16 @@
 // common.c -- misc functions used in client and server
 
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 #include "GenericParser2.h"
 #include "stringed_ingame.h"
-#include "../qcommon/game_version.h"
+#include "qcommon/game_version.h"
 #ifndef __linux__
-//#include <windows.h>
-#include "../qcommon/platform.h"
+#include "qcommon/platform.h"
 #endif
 
-#ifdef _XBOX
-#include "../xbox/XBLive.h"
-#include "../cgame/cg_local.h"
-#include "../client/cl_data.h"
-#endif
+#include "../server/NPCNav/navigator.h"
 
 #define	MAXPRINTMSG	4096
 
@@ -25,20 +20,10 @@ int		com_argc;
 char	*com_argv[MAX_NUM_ARGVS+1];
 
 
-#ifdef USE_CD_KEY
-
-extern char cl_cdkey[34];
-
-#endif // USE_CD_KEY
-
 FILE *debuglogfile;
 fileHandle_t logfile;
 fileHandle_t	com_journalFile;			// events are written here
 fileHandle_t	com_journalDataFile;		// config files are written here
-
-// Global language setting - this should be used instead of the myriad language
-// cvars. Will be one of the Xbox values: XC_LANGUAGE_(ENGLISH|FRENCH|GERMAN)
-DWORD	g_dwLanguage;
 
 cvar_t	*com_viewlog;
 cvar_t	*com_speeds;
@@ -55,6 +40,8 @@ cvar_t	*com_sv_running;
 cvar_t	*com_cl_running;
 cvar_t	*com_logfile;		// 1 = buffer log, 2 = flush after each print
 cvar_t	*com_showtrace;
+
+cvar_t	*com_optvehtrace;
 
 #ifdef G2_PERFORMANCE_ANALYSIS
 cvar_t	*com_G2Report;
@@ -119,22 +106,6 @@ void Com_EndRedirect (void)
 	rd_flush = NULL;
 }
 
-void QDECL Com_PrintfAlways( const char *fmt, ... ) {
-	va_list		argptr;
-	char		msg[MAXPRINTMSG];
-
-	va_start (argptr,fmt);
-	vsprintf (msg,fmt,argptr);
-	va_end (argptr);
-
-	CL_ConsolePrint( msg, 0 );
-
-	// echo to dedicated console and early console
-#ifndef FINAL_BUILD
-	Sys_Print( msg );
-#endif
-}
-
 /*
 =============
 Com_Printf
@@ -146,10 +117,8 @@ A raw string should NEVER be passed as fmt, because of "%f" type crashers.
 =============
 */
 void QDECL Com_Printf( const char *fmt, ... ) {
-#ifdef _DEBUG
 	va_list		argptr;
 	char		msg[MAXPRINTMSG];
-	qboolean	silent;
 
 	va_start (argptr,fmt);
 	vsprintf (msg,fmt,argptr);
@@ -166,29 +135,15 @@ void QDECL Com_Printf( const char *fmt, ... ) {
 		return;
 	}
 
-	// * means dont draw this console message on the player screen
-	// but put it on the console
-	silent = qfalse;
-	if ( msg[0] == '*' )
-	{
-		strcpy ( msg, msg + 1 );
-
-		if ( msg[1] != '*' )
-		{
-			silent = qtrue;
-		}
-	}
-
 	// echo to console if we're not a dedicated server
 	if ( com_dedicated && !com_dedicated->integer ) {
-		CL_ConsolePrint( msg, silent );
+		CL_ConsolePrint( msg );
 	}
 
 	// echo to dedicated console and early console
 	Sys_Print( msg );
 
 	// logfile
-#ifndef _XBOX
 	if ( com_logfile && com_logfile->integer ) {
 		if ( !logfile && FS_Initialized() ) {
 			struct tm *newtime;
@@ -209,16 +164,15 @@ void QDECL Com_Printf( const char *fmt, ... ) {
 			FS_Write(msg, strlen(msg), logfile);
 		}
 	}
-#endif
 
-#if defined(_WIN32) && defined(_DEBUG) && !defined(_XBOX)	
+
+#if defined(_WIN32) && defined(_DEBUG)
 	if ( *msg )
 	{
 		OutputDebugString ( Q_CleanStr(msg) );
 		OutputDebugString ("\n");
 	}
 #endif
-#endif //_DEBUG
 }
 
 
@@ -268,31 +222,11 @@ Both client and server can use this, and it will
 do the apropriate things.
 =============
 */
-
-namespace ui
-{
-	extern qboolean inHandler;
-}
-
-bool bComErrorLostConnection = false;
-
 void QDECL Com_Error( int code, const char *fmt, ... ) {
 	va_list		argptr;
 	static int	lastErrorTime;
 	static int	errorCount;
 	int			currentTime;
-#ifdef _XBOX
-	int			wasRunningServer = com_sv_running->integer;
-#endif
-
-	ui::inHandler = qfalse;
-
-	// We need to know if we're being called because the connection to Live was lost.
-	// If so, we'll later provide the option to go to the dashboard
-	if( Q_stricmp( fmt, "@MENUS_XBOX_LOST_CONNECTION" ) == 0 )
-		bComErrorLostConnection = true;
-	else
-		bComErrorLostConnection = false;
 
 #if defined(_WIN32) && defined(_DEBUG)
 	if ( code != ERR_DISCONNECT && code != ERR_NEED_CD ) {
@@ -333,7 +267,6 @@ void QDECL Com_Error( int code, const char *fmt, ... ) {
 	vsprintf (com_errorMessage,fmt,argptr);
 	va_end (argptr);
 
-	Cvar_Set("com_errorMessage", "");
 	if ( code != ERR_DISCONNECT ) {
 		Cvar_Get("com_errorMessage", "", CVAR_ROM);	//give com_errorMessage a default so it won't come back to life after a resetDefaults
 		Cvar_Set("com_errorMessage", com_errorMessage);
@@ -344,11 +277,6 @@ void QDECL Com_Error( int code, const char *fmt, ... ) {
 		CL_FlushMemory( );
 		com_errorEntered = qfalse;
 
-#ifdef _XBOX
-		// I THINK this only happens on client
-		Net_XboxDisconnect();
-#endif
-
 		throw ("DISCONNECTED\n");
 	} else if ( code == ERR_DROP || code == ERR_DISCONNECT ) {
 		Com_Printf ("********************\nERROR: %s\n********************\n", com_errorMessage);
@@ -356,12 +284,6 @@ void QDECL Com_Error( int code, const char *fmt, ... ) {
 		CL_Disconnect( qtrue );
 		CL_FlushMemory( );
 		com_errorEntered = qfalse;
-
-#ifdef _XBOX
-		// Clients (only) need to do connection cleanup now
-		if (!wasRunningServer)
-			Net_XboxDisconnect();
-#endif
 
 		throw ("DROPPED\n");
 	} else if ( code == ERR_NEED_CD ) {
@@ -785,18 +707,11 @@ journaled file
 
 // bk001129 - here we go again: upped from 64
 #define	MAX_PUSHED_EVENTS	            1024
-
-#ifdef _XBOX
-static int com_pushedEventsHead[2] = {0, 0};
-static int com_pushedEventsTail[2] = {0, 0};
-static sysEvent_t com_pushedEvents[MAX_PUSHED_EVENTS][2];
-#else
 // bk001129 - init, also static
 static int		com_pushedEventsHead = 0;
 static int             com_pushedEventsTail = 0;
 // bk001129 - static
 static sysEvent_t	com_pushedEvents[MAX_PUSHED_EVENTS];
-#endif // _XBOX
 
 /*
 =================
@@ -884,13 +799,8 @@ void Com_InitPushEvent( void ) {
   memset( com_pushedEvents, 0, sizeof(com_pushedEvents) );
   // reset counters while we are at it
   // beware: GetEvent might still return an SE_NONE from the buffer
-#ifdef _XBOX
-  com_pushedEventsHead[0] = com_pushedEventsHead[1] = 0;
-  com_pushedEventsTail[0] = com_pushedEventsTail[1] = 0;
-#else
   com_pushedEventsHead = 0;
   com_pushedEventsTail = 0;
-#endif
 }
 
 
@@ -903,28 +813,6 @@ void Com_PushEvent( sysEvent_t *event ) {
 	sysEvent_t		*ev;
 	static int printedWarning = 0; // bk001129 - init, bk001204 - explicit int
 
-#ifdef _XBOX
-	ev = &com_pushedEvents[ com_pushedEventsHead[ClientManager::ActiveClientNum()] & (MAX_PUSHED_EVENTS-1) ][ClientManager::ActiveClientNum()];
-
-	if ( com_pushedEventsHead[ClientManager::ActiveClientNum()] - com_pushedEventsTail[ClientManager::ActiveClientNum()] >= MAX_PUSHED_EVENTS ) {
-
-		// don't print the warning constantly, or it can give time for more...
-		if ( !printedWarning ) {
-			printedWarning = qtrue;
-			Com_Printf( "WARNING: Com_PushEvent overflow\n" );
-		}
-
-		if ( ev->evPtr ) {
-			Z_Free( ev->evPtr );
-		}
-		com_pushedEventsTail[ClientManager::ActiveClientNum()]++;
-	} else {
-		printedWarning = qfalse;
-	}
-
-	*ev = *event;
-	com_pushedEventsHead[ClientManager::ActiveClientNum()]++;
-#else
 	ev = &com_pushedEvents[ com_pushedEventsHead & (MAX_PUSHED_EVENTS-1) ];
 
 	if ( com_pushedEventsHead - com_pushedEventsTail >= MAX_PUSHED_EVENTS ) {
@@ -945,7 +833,6 @@ void Com_PushEvent( sysEvent_t *event ) {
 
 	*ev = *event;
 	com_pushedEventsHead++;
-#endif // _XBOX
 }
 
 /*
@@ -954,17 +841,10 @@ Com_GetEvent
 =================
 */
 sysEvent_t	Com_GetEvent( void ) {
-#ifdef _XBOX
-	if ( com_pushedEventsHead[ClientManager::ActiveClientNum()] > com_pushedEventsTail[ClientManager::ActiveClientNum()] ) {
-		com_pushedEventsTail[ClientManager::ActiveClientNum()]++;
-		return com_pushedEvents[ (com_pushedEventsTail[ClientManager::ActiveClientNum()]-1) & (MAX_PUSHED_EVENTS-1) ][ClientManager::ActiveClientNum()];
-	}
-#else
 	if ( com_pushedEventsHead > com_pushedEventsTail ) {
 		com_pushedEventsTail++;
 		return com_pushedEvents[ (com_pushedEventsTail-1) & (MAX_PUSHED_EVENTS-1) ];
 	}
-#endif
 	return Com_GetRealEvent();
 }
 
@@ -1003,7 +883,7 @@ Returns last event time
 int Com_EventLoop( void ) {
 	sysEvent_t	ev;
 	netadr_t	evFrom;
-	static byte	bufData[MAX_MSGLEN];
+	byte		bufData[MAX_MSGLEN];
 	msg_t		buf;
 
 	MSG_Init( &buf, bufData, sizeof( bufData ) );
@@ -1088,25 +968,6 @@ int Com_EventLoop( void ) {
 			} else {
 				CL_PacketEvent( evFrom, &buf );
 			}
-			break;
-		case SE_BROADCAST_PACKET:
-			// Bwa ha ha! Take that, evil UDP broadcast users!
-//			evFrom = *(netadr_t *)ev.evPtr;
-//			memset(&evFrom, 0, sizeof(evFrom));
-			buf.cursize = ev.evPtrLength;// - sizeof( evFrom );
-
-			// we must copy the contents of the message out, because
-			// the event buffers are only large enough to hold the
-			// exact payload, but channel messages need to be large
-			// enough to hold fragment reassembly
-			if ( (unsigned)buf.cursize > buf.maxsize ) {
-				Com_Printf("Com_EventLoop: oversize packet\n");
-				continue;
-			}
-			Com_Memcpy( buf.data, ev.evPtr, buf.cursize );
-
-			// The ONLY broadcast packets we should EVER see are from system link servers!
-			Syslink_PacketEvent( &buf );
 			break;
 		}
 
@@ -1199,111 +1060,6 @@ static void Com_Crash_f( void ) {
 	* ( int * ) 0 = 0x12345678;
 }
 
-#ifdef USE_CD_KEY
-
-qboolean CL_CDKeyValidate( const char *key, const char *checksum );
-
-/*
-=================
-Com_ReadCDKey
-=================
-*/
-void Com_ReadCDKey( const char *filename ) {
-	fileHandle_t	f;
-	char			buffer[33];
-	char			fbuffer[MAX_OSPATH];
-
-	sprintf(fbuffer, "%s/q3key", filename);
-
-	FS_SV_FOpenFileRead( fbuffer, &f );
-	if ( !f ) {
-		Q_strncpyz( cl_cdkey, "                ", 17 );
-		return;
-	}
-
-	Com_Memset( buffer, 0, sizeof(buffer) );
-
-	FS_Read( buffer, 16, f );
-	FS_FCloseFile( f );
-
-	if (CL_CDKeyValidate(buffer, NULL)) {
-		Q_strncpyz( cl_cdkey, buffer, 17 );
-	} else {
-		Q_strncpyz( cl_cdkey, "                ", 17 );
-	}
-}
-
-/*
-=================
-Com_AppendCDKey
-=================
-*/
-void Com_AppendCDKey( const char *filename ) {
-	fileHandle_t	f;
-	char			buffer[33];
-	char			fbuffer[MAX_OSPATH];
-
-	sprintf(fbuffer, "%s/q3key", filename);
-
-	FS_SV_FOpenFileRead( fbuffer, &f );
-	if (!f) {
-		Q_strncpyz( &cl_cdkey[16], "                ", 17 );
-		return;
-	}
-
-	Com_Memset( buffer, 0, sizeof(buffer) );
-
-	FS_Read( buffer, 16, f );
-	FS_FCloseFile( f );
-
-	if (CL_CDKeyValidate(buffer, NULL)) {
-		strcat( &cl_cdkey[16], buffer );
-	} else {
-		Q_strncpyz( &cl_cdkey[16], "                ", 17 );
-	}
-}
-
-#ifndef DEDICATED // bk001204
-/*
-=================
-Com_WriteCDKey
-=================
-*/
-static void Com_WriteCDKey( const char *filename, const char *ikey ) {
-#ifndef _XBOX
-	fileHandle_t	f;
-	char			fbuffer[MAX_OSPATH];
-	char			key[17];
-
-
-	sprintf(fbuffer, "%s/q3key", filename);
-
-
-	Q_strncpyz( key, ikey, 17 );
-
-	if(!CL_CDKeyValidate(key, NULL) ) {
-		return;
-	}
-
-	f = FS_SV_FOpenFileWrite( fbuffer );
-	if ( !f ) {
-		Com_Printf ("Couldn't write %s.\n", filename );
-		return;
-	}
-
-	FS_Write( key, 16, f );
-
-	FS_Printf( f, "\n// generated by jamp, do not modify\r\n" );
-	FS_Printf( f, "// Do not give this file to ANYONE.\r\n" );
-	FS_Printf( f, "// id Software and Activision will NOT ask you to send this file to them.\r\n");
-
-	FS_FCloseFile( f );
-#endif
-}
-#endif
-
-#endif // USE_CD_KEY
-
 
 #ifdef MEM_DEBUG
 	void SH_Register(void);
@@ -1317,20 +1073,16 @@ Com_Init
 void Com_Init( char *commandLine ) {
 	char	*s;
 
-	Com_Printf( "%s %s %s\n", Q3_VERSION, CPUSTRING, __DATE__ );
+	Com_Printf( "%s %s %s\n", JK_VERSION, CPUSTRING, __DATE__ );
 
 	try
 	{
-		// Grab the user's langauge preference from the dashboard right away!
-		// We only support french/german/english (with english as default)
-		g_dwLanguage = XGetLanguage();
-		if( g_dwLanguage != XC_LANGUAGE_FRENCH && g_dwLanguage != XC_LANGUAGE_GERMAN )
-			g_dwLanguage = XC_LANGUAGE_ENGLISH;
-
-	  // bk001129 - do this before anything else decides to push events
-	  Com_InitPushEvent();
+		// bk001129 - do this before anything else decides to push events
+		Com_InitPushEvent();
 
 		Cvar_Init ();
+
+		navigator.Init();
 
 		// prepare enough of the subsystems to handle
 		// cvar and command buffer management
@@ -1340,24 +1092,6 @@ void Com_Init( char *commandLine ) {
 		Cbuf_Init ();
 
 		Com_InitZoneMemory();
-
-#ifdef _XBOX
-		// We get a big head-start on getting our IP address (which can take a while)
-		// Our version no lnoger blocks during DHCP negotiation, and we use another
-		// function to force the process to finish later (in main())
-		NET_Init();
-
-		extern void WF_Init();
-		WF_Init();
-
-		// Init client manager stuff
-		ClientManager::Init(1);
-
-		ClientManager::ActivateClient(0);
-		ClientManager::SetMainClient(0);
-		
-		ClientManager::splitScreenMode = qfalse;
-#endif
 
 		Cmd_Init ();
 
@@ -1372,16 +1106,6 @@ void Com_Init( char *commandLine ) {
 
 		// done early so bind command exists
 		CL_InitKeyCommands();
-
-#ifdef _XBOX
-		extern void Sys_InitFileCodes();
-		extern void Sys_FilecodeScan_f();
-		Sys_InitFileCodes();
-		Cmd_AddCommand("filecodes", Sys_FilecodeScan_f);
-
-		extern void Sys_StreamInit();
-		Sys_StreamInit();
-#endif
 
 		FS_InitFilesystem ();
 
@@ -1401,22 +1125,6 @@ void Com_Init( char *commandLine ) {
 		Cbuf_AddText ("exec autoexec.cfg\n");
 
 		Cbuf_Execute ();
-
-		// Start sound super-early. This allocates all kinds of crap using new
-		// that never gets freed.
-		if ( !cls.soundStarted ) {
-			cls.soundStarted = qtrue;
-			S_Init();
-		}
-		if ( !cls.soundRegistered ) {
-			cls.soundRegistered = qtrue;
-			S_BeginRegistration(ClientManager::NumClients());
-		}
-
-		// Similarly, get the shadertext loaded nice and early.
-		// Flag the call to not bother making the hash tables
-		extern void ScanAndLoadShaderFiles( const char *path, bool doHash );
-		ScanAndLoadShaderFiles( "shaders", false );
 
 		// override anything from the config files with command line args
 		Com_StartupVariable( NULL );
@@ -1451,10 +1159,12 @@ void Com_Init( char *commandLine ) {
 		com_terrainPhysics = Cvar_Get ("com_terrainPhysics", "1", CVAR_CHEAT);
 
 		com_dropsim = Cvar_Get ("com_dropsim", "0", CVAR_CHEAT);
-		com_viewlog = Cvar_Get( "viewlog", "0", CVAR_CHEAT );
+		com_viewlog = Cvar_Get( "viewlog", "0", 0 );
 		com_speeds = Cvar_Get ("com_speeds", "0", 0);
 		com_timedemo = Cvar_Get ("timedemo", "0", 0);
 		com_cameraMode = Cvar_Get ("com_cameraMode", "0", CVAR_CHEAT);
+
+		com_optvehtrace = Cvar_Get("com_optvehtrace", "0", 0);
 
 		cl_paused = Cvar_Get ("cl_paused", "0", CVAR_ROM);
 		sv_paused = Cvar_Get ("sv_paused", "0", CVAR_ROM);
@@ -1508,7 +1218,7 @@ void Com_Init( char *commandLine ) {
 		Cmd_AddCommand ("changeVectors", MSG_ReportChangeVectors_f );
 		Cmd_AddCommand ("writeconfig", Com_WriteConfig_f );
 
-		s = va("%s %s %s", Q3_VERSION, CPUSTRING, __DATE__ );
+		s = va("%s %s %s", JK_VERSION, CPUSTRING, __DATE__ );
 		com_version = Cvar_Get ("version", s, CVAR_ROM | CVAR_SERVERINFO );
 
 		SE_Init();
@@ -1517,12 +1227,6 @@ void Com_Init( char *commandLine ) {
 		Netchan_Init( Com_Milliseconds() & 0xffff );	// pick a port value that should be nice and random
 		VM_Init();
 		SV_Init();
-#ifdef _XBOX
-		//Load this earlier so it doesn't create a fragment in the middle of
-		//the zone.
-		extern int PC_LoadGlobalDefines(const char*);
-		PC_LoadGlobalDefines("ui/jamp/menudef.h");
-#endif
 
 		com_dedicated->modified = qfalse;
 		if ( !com_dedicated->integer ) {
@@ -1578,7 +1282,6 @@ void Com_Init( char *commandLine ) {
 //==================================================================
 
 void Com_WriteConfigToFile( const char *filename ) {
-#ifndef _XBOX
 	fileHandle_t	f;
 
 	f = FS_FOpenFileWrite( filename );
@@ -1591,7 +1294,6 @@ void Com_WriteConfigToFile( const char *filename ) {
 	Key_WriteBindings (f);
 	Cvar_WriteVariables (f);
 	FS_FCloseFile( f );
-#endif
 }
 
 
@@ -1603,11 +1305,6 @@ Writes key bindings and archived cvars to config file if modified
 ===============
 */
 void Com_WriteConfiguration( void ) {
-#ifndef DEDICATED // bk001204
-#ifdef USE_CD_KEY
-	cvar_t	*fs;
-#endif	// USE_CD_KEY
-#endif
 	// if we are quiting without fully initializing, make sure
 	// we don't write out anything
 	if ( !com_fullyInitialized ) {
@@ -1623,18 +1320,6 @@ void Com_WriteConfiguration( void ) {
 	Com_WriteConfigToFile( "jampserver.cfg" );
 #else
 	Com_WriteConfigToFile( "jampconfig.cfg" );
-#endif
-
-	// bk001119 - tentative "not needed for dedicated"
-#ifndef DEDICATED
-#ifdef USE_CD_KEY
-	fs = Cvar_Get ("fs_game", "", CVAR_INIT|CVAR_SYSTEMINFO );
-	if (UI_usesUniqueCDKey() && fs && fs->string[0] != 0) {
-		Com_WriteCDKey( fs->string, &cl_cdkey[16] );
-	} else {
-		Com_WriteCDKey( "base", cl_cdkey );
-	}
-#endif	// USE_CD_KEY
 #endif
 }
 
@@ -1712,7 +1397,7 @@ int Com_ModifyMsec( int msec ) {
 }
 
 #ifdef G2_PERFORMANCE_ANALYSIS
-#include "../qcommon/timing.h"
+#include "qcommon/timing.h"
 void G2Time_ResetTimers(void);
 void G2Time_ReportTimers(void);
 extern timing_c G2PerformanceTimer_PreciseFrame;
@@ -1779,15 +1464,6 @@ try
 		minMsec = 1;
 	}
 	do {
-#ifdef _XBOX
-		if(ClientManager::splitScreenMode == qtrue)
-		{
-			CM_START_LOOP();
-			com_frameTime = Com_EventLoop();
-			CM_END_LOOP();
-		}
-		else
-#endif
 		com_frameTime = Com_EventLoop();
 		if ( lastTime > com_frameTime ) {
 			lastTime = com_frameTime;		// possible on first frame
@@ -1815,8 +1491,6 @@ try
 	// or shut down the client system.
 	// Do this after the server may have started,
 	// but before the client tries to auto-connect
-	// XBOX: Nope, our "dedicated" server still needs some client, for UI and such
-/*
 	if ( com_dedicated->modified ) {
 		// get the latched value
 		Cvar_Get( "dedicated", "0", 0 );
@@ -1830,7 +1504,6 @@ try
 			Sys_ShowConsole( 1, qtrue );
 		}
 	}
-*/
 
 	//
 	// client system
@@ -1843,15 +1516,6 @@ try
 		if ( com_speeds->integer ) {
 			timeBeforeEvents = Sys_Milliseconds ();
 		}
-#ifdef _XBOX
-		if(ClientManager::splitScreenMode == qtrue)
-		{
-			CM_START_LOOP();
-			Com_EventLoop();
-			CM_END_LOOP();
-		}
-		else
-#endif
 		Com_EventLoop();
 		Cbuf_Execute ();
 
@@ -1868,10 +1532,6 @@ try
 		if ( com_speeds->integer ) {
 			timeAfter = Sys_Milliseconds ();
 		}
-	}
-	else
-	{
-		CL_Frame( msec );
 	}
 
 	//
@@ -1911,12 +1571,6 @@ try
 	key = lastTime * 0x87243987;
 
 	com_frameNumber++;
-
-#ifdef _XBOX
-	// Need to do Xbox Live frame here, because it can trigger an ERR_DROP
-	if(ClientManager::splitScreenMode == false)
-        XBL_Tick();
-#endif
 
 }//try
 	catch (const char* reason) {
@@ -1970,7 +1624,7 @@ void Com_Shutdown (void)
 }
 
 #if !( defined __linux__ || defined __FreeBSD__ )  // r010123 - include FreeBSD 
-#if defined(_XBOX) || ((!id386) && (!defined __i386__)) // rcg010212 - for PPC
+#if ((!id386) && (!defined __i386__)) // rcg010212 - for PPC
 
 void Com_Memcpy (void* dest, const void* src, const size_t count)
 {

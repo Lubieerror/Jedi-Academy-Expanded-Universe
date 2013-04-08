@@ -12,7 +12,7 @@
  *
  *****************************************************************************/
 
-#include "../game/q_shared.h"
+#include "qcommon/q_shared.h"
 #include "l_log.h"
 #include "l_memory.h"
 #include "l_script.h"
@@ -20,8 +20,8 @@
 #include "l_precomp.h"
 #include "l_struct.h"
 #include "aasfile.h"
-#include "../game/botlib.h"
-#include "../game/be_aas.h"
+#include "game/botlib.h"
+#include "game/be_aas.h"
 #include "be_aas_funcs.h"
 #include "be_aas_def.h"
 
@@ -3252,11 +3252,9 @@ aas_lreachability_t *AAS_FindFaceReachabilities(vec3_t *facepoints, int numpoint
 		lreach->traveltime = 0;
 		lreach->next = lreachabilities;
 		lreachabilities = lreach;
-#ifndef _XBOX
 #ifndef BSPC
 		if (towardsface) AAS_PermanentLine(lreach->start, lreach->end, 1);
 		else AAS_PermanentLine(lreach->start, lreach->end, 2);
-#endif
 #endif
 	} //end for
 	return lreachabilities;

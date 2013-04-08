@@ -2,7 +2,7 @@
 //
 // bg_g2_utils.c -- both games misc functions, all completely stateless
 
-#include "q_shared.h"
+#include "qcommon/q_shared.h"
 #include "bg_public.h"
 #include "bg_strap.h"
 
@@ -11,16 +11,15 @@
 #endif
 
 #ifdef UI_EXPORTS
-#include "../ui/ui_local.h"
+#include "ui/ui_local.h"
 #endif
 
 #ifndef UI_EXPORTS
 #ifndef QAGAME
-#include "../cgame/cg_local.h"
+#include "cgame/cg_local.h"
 #endif
 #endif
 
-#include "../namespace_begin.h"
 
 void BG_AttachToRancor( void *ghoul2,
 					   float rancYaw,
@@ -121,4 +120,3 @@ qboolean BG_GetRootSurfNameWithVariant( void *ghoul2, const char *rootSurfName, 
 	return qfalse;
 }
 
-#include "../namespace_end.h"

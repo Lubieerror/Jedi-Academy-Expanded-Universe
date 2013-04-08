@@ -237,7 +237,6 @@ qboolean	G_TryPushingEntity( gentity_t *check, gentity_t *pusher, vec3_t move, v
 		{
 			G_Damage(check, pusher, pusher, vec3_origin, check->r.currentOrigin, 999, 0, MOD_UNKNOWN);
 		}
-		return qfalse;
 	}
 	// if it is ok to leave in the old position, do it
 	// this is only relevent for riding entities, not pushed
@@ -270,6 +269,7 @@ otherwise riders would continue to slide.
 If qfalse is returned, *obstacle will be the blocking entity
 ============
 */
+void NPC_RemoveBody( gentity_t *self );
 qboolean G_MoverPush( gentity_t *pusher, vec3_t move, vec3_t amove, gentity_t **obstacle ) {
 	int			i, e;
 	gentity_t	*check;
@@ -364,6 +364,26 @@ qboolean G_MoverPush( gentity_t *pusher, vec3_t move, vec3_t amove, gentity_t **
 			(check->s.eType == ET_PLAYER && check->health < 1))
 		{ //whatever, just crush it
 			G_Damage( check, pusher, pusher, NULL, NULL, 999, 0, MOD_CRUSH );
+			continue;
+		}
+
+		if ( (check->r.contents & CONTENTS_TRIGGER) && check->s.weapon == G2_MODEL_PART)
+		{//keep limbs from blocking elevators.  Kill the limb and keep moving.
+			G_FreeEntity(check);
+			continue;
+		}
+
+		if( check->s.eFlags & EF_DROPPEDWEAPON )
+		{//keep dropped weapons from blocking elevators.  Kill the weapon and keep moving.
+			G_FreeEntity(check);
+			continue;
+		}
+
+		if ( check->s.eType == ET_NPC //an NPC
+			&& check->health <= 0 //NPC is dead
+			&& !(check->flags & FL_NOTARGET) )  //NPC isn't still spawned or in no target mode.
+		{//dead npcs should be removed now!
+			NPC_RemoveBody( check );
 			continue;
 		}
 
@@ -1007,6 +1027,8 @@ Blocked_Door
 */
 void Blocked_Door( gentity_t *ent, gentity_t *other )
 {
+	//determines if we need to relock after moving or not.
+	qboolean relock = (ent->spawnflags & MOVER_LOCKED) ? qtrue : qfalse;
 	if ( ent->damage ) {
 		G_Damage( other, ent, ent, NULL, NULL, ent->damage, 0, MOD_CRUSH );
 	}
@@ -1016,6 +1038,10 @@ void Blocked_Door( gentity_t *ent, gentity_t *other )
 
 	// reverse direction
 	Use_BinaryMover( ent, ent, other );
+	if(relock)
+	{//door was locked before reverse move, relock door.
+		LockDoors(ent);
+	}
 }
 
 
@@ -1034,11 +1060,11 @@ static void Touch_DoorTriggerSpectator( gentity_t *ent, gentity_t *other, trace_
 	VectorClear(dir);
 	if (fabs(other->s.origin[axis] - ent->r.absmax[axis]) <
 		fabs(other->s.origin[axis] - ent->r.absmin[axis])) {
-		origin[axis] = ent->r.absmin[axis] - 10;
+		origin[axis] = ent->r.absmin[axis] - 25;
 		dir[axis] = -1;
 	}
 	else {
-		origin[axis] = ent->r.absmax[axis] + 10;
+		origin[axis] = ent->r.absmax[axis] + 25;
 		dir[axis] = 1;
 	}
 	for (i = 0; i < 3; i++) {
@@ -1048,15 +1074,13 @@ static void Touch_DoorTriggerSpectator( gentity_t *ent, gentity_t *other, trace_
 
 	vectoangles(dir, angles);
 
-
 	VectorSet(pMins, -15.0f, -15.0f, DEFAULT_MINS_2);
 	VectorSet(pMaxs, 15.0f, 15.0f, DEFAULT_MAXS_2);
 	trap_Trace(&tr, origin, pMins, pMaxs, origin, other->s.number, other->clipmask);
 	if (!tr.startsolid &&
 		!tr.allsolid &&
 		tr.fraction == 1.0f &&
-		tr.entityNum == ENTITYNUM_NONE &&
-		CM_LeafCluster(CM_PointLeafnum(origin)) != -1 )	// Check for teleporting out of the world
+		tr.entityNum == ENTITYNUM_NONE)
 	{
 		TeleportPlayer(other, origin, angles );
 	}
@@ -1977,13 +2001,7 @@ void SP_func_static( gentity_t *ent )
 		ent->s.bolt1 = 1;
 	}
 
-#ifdef _XBOX
-	int	tempModelScale;
-	G_SpawnInt("model2scale", "0", &tempModelScale);
-	ent->s.iModelScale = tempModelScale;
-#else
 	G_SpawnInt("model2scale", "0", &ent->s.iModelScale);
-#endif
 	if (ent->s.iModelScale < 0)
 	{
 		ent->s.iModelScale = 0;
@@ -2141,13 +2159,7 @@ void SP_func_rotating (gentity_t *ent) {
 		trap_LinkEntity( ent );
 	}
 
-#ifdef _XBOX
-	int	tempModelScale;
-	G_SpawnInt("model2scale", "0", &tempModelScale);
-	ent->s.iModelScale = tempModelScale;
-#else
 	G_SpawnInt("model2scale", "0", &ent->s.iModelScale);
-#endif
 	if (ent->s.iModelScale < 0)
 	{
 		ent->s.iModelScale = 0;
@@ -2344,6 +2356,8 @@ static void CacheChunkEffects( material_t material )
 	case MAT_ROPE:
 		G_EffectIndex( "chunks/ropebreak" );
 //		G_SoundIndex(); // FIXME: give it a sound
+		break;
+	default:
 		break;
 	}
 }

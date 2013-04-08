@@ -1,7 +1,7 @@
 // this include must remain at the top of every CPP file
 
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 #if !defined(GENERICPARSER2_H_INC)
 	#include "GenericParser2.h"
@@ -872,12 +872,6 @@ bool CGenericParser2::Parse(char **dataPtr, bool cleanFirst, bool writeable)
 {
 	CTextPool	*topPool;
 
-#ifdef _XBOX
-	// Parsers are temporary structures.  They exist mainly at load time.
-	extern void Z_SetNewDeleteTemporary(bool bTemp);
-	Z_SetNewDeleteTemporary(true);
-#endif
-
 	if (cleanFirst)
 	{
 		Clean();
@@ -892,10 +886,6 @@ bool CGenericParser2::Parse(char **dataPtr, bool cleanFirst, bool writeable)
 	mTopLevel.SetWriteable(writeable);
 	topPool = mTextPool;
 	bool ret = mTopLevel.Parse(dataPtr, &topPool);
-
-#ifdef _XBOX
-	Z_SetNewDeleteTemporary(false);
-#endif
 
 	return ret;
 }

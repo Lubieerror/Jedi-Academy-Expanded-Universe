@@ -1,7 +1,7 @@
 #ifndef __BG_VEHICLES_H
 #define __BG_VEHICLES_H
 
-#include "q_shared.h"
+#include "qcommon/q_shared.h"
 
 typedef struct Vehicle_s Vehicle_t;
 typedef struct bgEntity_s bgEntity_t;
@@ -25,9 +25,7 @@ typedef enum
 	WPOSE_SABERRIGHT,
 } EWeaponPose;
 
-#include "../namespace_begin.h"
 extern stringID_table_t VehicleTable[VH_NUM_VEHICLES+1];
-#include "../namespace_end.h"
 
 //===========================================================================================================
 //START VEHICLE WEAPONS
@@ -50,6 +48,7 @@ typedef struct
 	int		iLoopSound;	//index of loopSound
 	float	fSpeed;		//speed of projectile/range of traceline
 	float	fHoming;		//0.0 = not homing, 0.5 = half vel to targ, half cur vel, 1.0 = all vel to targ
+	float	fHomingFOV;		//missile will lose lock on if DotProduct of missile direction and direction to target ever drops below this (-1 to 1, -1 = never lose target, 0 = lose if ship gets behind missile, 1 = pretty much will lose it's target right away)
 	int		iLockOnTime;	//0 = no lock time needed, else # of ms needed to lock on
 	int		iDamage;		//damage done when traceline or projectile directly hits target
 	int		iSplashDamage;//damage done to ents in splashRadius of end of traceline or projectile origin on impact
@@ -62,7 +61,7 @@ typedef struct
 	qboolean	bExplodeOnExpire;	//when iLifeTime is up, explodes rather than simply removing itself
 } vehWeaponInfo_t;
 //NOTE: this MUST stay up to date with the number of variables in the vehFields table!!!
-#define NUM_VWEAP_PARMS	24
+#define NUM_VWEAP_PARMS	25
 
 #define	VWFOFS(x) ((int)&(((vehWeaponInfo_t *)0)->x))
 
@@ -70,10 +69,8 @@ typedef struct
 #define VEH_WEAPON_BASE	0
 #define VEH_WEAPON_NONE	-1
 
-#include "../namespace_begin.h"
 extern vehWeaponInfo_t g_vehWeaponInfo[MAX_VEH_WEAPONS];
 extern int	numVehicleWeapons;
-#include "../namespace_end.h"
 
 //===========================================================================================================
 //END VEHICLE WEAPONS
@@ -365,10 +362,8 @@ typedef struct
 #define VEHICLE_BASE	0
 #define VEHICLE_NONE	-1
 
-#include "../namespace_begin.h"
 extern vehicleInfo_t g_vehicleInfo[MAX_VEHICLES];
 extern int	numVehicles;
-#include "../namespace_end.h"
 
 #define VEH_DEFAULT_SPEED_MAX		800.0f
 #define VEH_DEFAULT_ACCEL			10.0f
@@ -402,7 +397,7 @@ extern int	numVehicles;
 #define	VEH_MOUNT_THROW_RIGHT		-6
 
 
-typedef enum
+typedef enum vehEject_e
 {
 	VEH_EJECT_LEFT, 
 	VEH_EJECT_RIGHT, 
@@ -410,7 +405,7 @@ typedef enum
 	VEH_EJECT_REAR, 
 	VEH_EJECT_TOP, 
 	VEH_EJECT_BOTTOM
-};
+} vehEject_t;
 
 // Vehicle flags.
 typedef enum
@@ -618,11 +613,12 @@ typedef struct Vehicle_s
 
 	//the guy who was previously the pilot
 	bgEntity_t *	m_pOldPilot;
+#if defined(__GCC__) || defined(MINGW32) || defined(MACOS_X)
+	} _Vehicle_t;
+#else
+	} Vehicle_t;
+#endif
 
-} Vehicle_t;
-
-#include "../namespace_begin.h"
 extern int BG_VehicleGetIndex( const char *vehicleName );
-#include "../namespace_end.h"
 
 #endif	// __BG_VEHICLES_H

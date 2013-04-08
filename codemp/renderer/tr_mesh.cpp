@@ -1,9 +1,13 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 // tr_mesh.c: triangle model functions
 
 #include "tr_local.h"
+
+#ifdef VV_LIGHTING
+#include "tr_lightmanager.h"
+#endif
 
 float ProjectRadius( float r, vec3_t location )
 {
@@ -35,9 +39,6 @@ float ProjectRadius( float r, vec3_t location )
 				   tr.viewParms.projectionMatrix[15];
 
 	pr = width / depth;
-#if defined (_XBOX)
-	pr = -pr;
-#endif
 
 	if ( pr > 1.0f )
 		pr = 1.0f;
@@ -329,8 +330,13 @@ void R_AddMD3Surfaces( trRefEntity_t *ent ) {
 	//
 	// set up lighting now that we know we aren't culled
 	//
+#ifdef VV_LIGHTING
+	if ( !personalModel ) {
+		VVLightMan.R_SetupEntityLighting( &tr.refdef, ent );
+#else
 	if ( !personalModel || r_shadows->integer > 1 ) {
 		R_SetupEntityLighting( &tr.refdef, ent );
+#endif
 	}
 
 	//
@@ -397,7 +403,12 @@ void R_AddMD3Surfaces( trRefEntity_t *ent ) {
 
 		// don't add third_person objects if not viewing through a portal
 		if ( !personalModel ) {
+#ifdef VV_LIGHTING
+			int dlightBits = ( ent->dlightBits != 0 );
+			R_AddDrawSurf( (surfaceType_t *)surface, shader, fogNum, dlightBits );
+#else
 			R_AddDrawSurf( (surfaceType_t *)surface, shader, fogNum, qfalse );
+#endif
 		}
 
 		surface = (md3Surface_t *)( (byte *)surface + surface->ofsEnd );

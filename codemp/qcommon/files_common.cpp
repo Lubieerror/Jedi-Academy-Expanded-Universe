@@ -6,14 +6,13 @@
  *****************************************************************************/
 
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
-#include "../client/client.h"
-//#include "../zlib32/zip.h"
+#include "client/client.h"
+//#include "zlib32/zip.h"
 //#include "unzip.h"
 #include "files.h"
 
-//#include <windows.h> //rww - included to make fs_copyfiles 2 related functions happy.
 #include "platform.h"
 
 /*
@@ -187,8 +186,7 @@ cvar_t		*fs_basepath;
 cvar_t		*fs_basegame;
 cvar_t		*fs_cdpath;
 cvar_t		*fs_copyfiles;
-cvar_t	*fs_gamedirvar;
-cvar_t		*fs_restrict;
+cvar_t		*fs_gamedirvar;
 cvar_t		*fs_dirbeforepak; //rww - when building search path, keep directories at top and insert pk3's under them
 searchpath_t	*fs_searchpaths;
 int			fs_readCount;			// total bytes read
@@ -276,10 +274,18 @@ Fix things up differently for win/unix/mac
 */
 void FS_ReplaceSeparators( char *path ) {
 	char	*s;
+	qboolean lastCharWasSep = qfalse;
 
 	for ( s = path ; *s ; s++ ) {
 		if ( *s == '/' || *s == '\\' ) {
-			*s = PATH_SEP;
+			if ( !lastCharWasSep ) {
+				*s = PATH_SEP;
+				lastCharWasSep = qtrue;
+			} else {
+				memmove (s, s + 1, strlen (s));
+			}
+		} else {
+			lastCharWasSep = qfalse;
 		}
 	}
 }
@@ -364,11 +370,11 @@ qboolean FS_FilenameCompare( const char *s1, const char *s2 ) {
 		}
 		
 		if (c1 != c2) {
-			return (qboolean)-1;		// strings not equal
+			return qtrue;		// strings not equal
 		}
 	} while (c1);
 	
-	return (qboolean)0;		// strings are equal
+	return qfalse;		// strings are equal
 }
 
 #define	MAXPRINTMSG	4096
@@ -442,9 +448,7 @@ void FS_Shutdown( qboolean closemfp ) {
 		next = p->next;
 
 		if ( p->pack ) {
-#ifndef _XBOX
 			unzClose(p->pack->handle);
-#endif
 			Z_Free( p->pack->buildBuffer );
 			Z_Free( p->pack );
 		}
@@ -487,14 +491,10 @@ void FS_InitFilesystem( void ) {
 	Com_StartupVariable( "fs_homepath" );
 	Com_StartupVariable( "fs_game" );
 	Com_StartupVariable( "fs_copyfiles" );
-	Com_StartupVariable( "fs_restrict" );
 
 	// try to start up normally
 	FS_Startup( BASEGAME );
 	initialized = qtrue;
-
-	// see if we are going to allow add-ons
-	FS_SetRestrictions();
 
 	// if we can't find default.cfg, assume that the paths are
 	// busted and error out now, rather than getting an unreadable

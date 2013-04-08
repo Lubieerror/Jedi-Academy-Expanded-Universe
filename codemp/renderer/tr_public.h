@@ -1,16 +1,13 @@
 #ifndef __TR_PUBLIC_H
 #define __TR_PUBLIC_H
 
-#include "../cgame/tr_types.h"
+#include "cgame/tr_types.h"
 
 #define	REF_API_VERSION		8
 
 //
 // these are the functions exported by the refresh module
 //
-#ifdef _XBOX
-template <class T> class SPARC;
-#endif
 typedef struct {
 	// called before the library is unloaded
 	// if the system is just reconfiguring, pass destroyWindow = qfalse,
@@ -36,11 +33,7 @@ typedef struct {
 
 	// the vis data is a large enough block of data that we go to the trouble
 	// of sharing it with the clipmodel subsystem
-#ifdef _XBOX
-	void	(*SetWorldVisData)( SPARC<byte> *vis );
-#else
 	void	(*SetWorldVisData)( const byte *vis );
-#endif
 
 	// EndRegistration will draw a tiny polygon with each texture, forcing
 	// them to be loaded into card memory
@@ -55,8 +48,10 @@ typedef struct {
 	void	(*AddPolyToScene)( qhandle_t hShader , int numVerts, const polyVert_t *verts, int num );
 	void	(*AddDecalToScene)(qhandle_t shader, const vec3_t origin, const vec3_t dir, float orientation, float r, float g, float b, float a, qboolean alphaFade, float radius, qboolean temporary );
 	int		(*LightForPoint)( vec3_t point, vec3_t ambientLight, vec3_t directedLight, vec3_t lightDir );
+#ifndef VV_LIGHTING
 	void	(*AddLightToScene)( const vec3_t org, float intensity, float r, float g, float b );
 	void	(*AddAdditiveLightToScene)( const vec3_t org, float intensity, float r, float g, float b );
+#endif
 	void	(*RenderScene)( const refdef_t *fd );
 
 	void	(*SetColor)( const float *rgba );	// NULL = 1,1,1,1

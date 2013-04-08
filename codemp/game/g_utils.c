@@ -4,7 +4,7 @@
 
 #include "g_local.h"
 #include "bg_saga.h"
-#include "q_shared.h"
+#include "qcommon/q_shared.h"
 
 typedef struct {
   char oldShader[MAX_QPATH];
@@ -150,12 +150,10 @@ int G_EffectIndex( const char *name )
 	return G_FindConfigstringIndex (name, CS_EFFECTS, MAX_FX, qtrue);
 }
 
-/*
 int G_BSPIndex( const char *name )
 {
 	return G_FindConfigstringIndex (name, CS_BSP_MODELS, MAX_SUB_BSP, qtrue);
 }
-*/
 
 //=====================================================================
 
@@ -383,11 +381,10 @@ void G_FreeFakeClient(gclient_t **cl)
 }
 
 //allocate a veh object
-//#define MAX_VEHICLES_AT_A_TIME		128
-#define MAX_VEHICLES_AT_A_TIME		32
+#define MAX_VEHICLES_AT_A_TIME		512//128
 static Vehicle_t g_vehiclePool[MAX_VEHICLES_AT_A_TIME];
 static qboolean g_vehiclePoolOccupied[MAX_VEHICLES_AT_A_TIME];
-qboolean g_vehiclePoolInit = qfalse;
+static qboolean g_vehiclePoolInit = qfalse;
 void G_AllocateVehicleObject(Vehicle_t **pVeh)
 {
 	int i = 0;
@@ -410,12 +407,6 @@ void G_AllocateVehicleObject(Vehicle_t **pVeh)
 		i++;
 	}
 	Com_Error(ERR_DROP, "Ran out of vehicle pool slots.");
-}
-
-// Clean up mess
-void G_ClearVehicles( void )
-{
-	g_vehiclePoolInit = qfalse;
 }
 
 //free the pointer, sort of a lame method
@@ -446,15 +437,6 @@ void G_CreateFakeClient(int entNum, gclient_t **cl)
 	*cl = gClPtrs[entNum];
 }
 
-#ifdef _XBOX
-void G_ClPtrClear(void)
-{
-	for(int i=0; i<MAX_GENTITIES; i++) {
-		gClPtrs[i] = NULL;
-	}
-}
-#endif
-
 //call this on game shutdown to run through and get rid of all the lingering client pointers.
 void G_CleanAllFakeClients(void)
 {
@@ -481,9 +463,7 @@ Finally reworked PM_SetAnim to allow non-pmove calls, so we take our
 local anim index into account and make the call -rww
 =============
 */
-#include "../namespace_begin.h"
 void BG_SetAnim(playerState_t *ps, animation_t *animations, int setAnimParts,int anim,int setAnimFlags, int blendTime);
-#include "../namespace_end.h"
 
 void G_SetAnim(gentity_t *ent, usercmd_t *ucmd, int setAnimParts, int anim, int setAnimFlags, int blendTime)
 {
@@ -723,8 +703,6 @@ static void G_SpewEntList(void)
 	char *str;
 #ifdef FINAL_BUILD
 	#define VM_OR_FINAL_BUILD
-#elif defined Q3_VM
-	#define VM_OR_FINAL_BUILD
 #endif
 
 #ifndef VM_OR_FINAL_BUILD
@@ -819,8 +797,8 @@ gentity_t *G_Spawn( void ) {
 	for ( force = 0 ; force < 2 ; force++ ) {
 		// if we go through all entities and can't find one to free,
 		// override the normal minimum times before use
-		e = &g_entities[MAX_CLIENTS + MAX_VEHICLE_ENTS];
-		for ( i = MAX_CLIENTS + MAX_VEHICLE_ENTS ; i<level.num_entities ; i++, e++) {
+		e = &g_entities[MAX_CLIENTS];
+		for ( i = MAX_CLIENTS ; i<level.num_entities ; i++, e++) {
 			if ( e->inuse ) {
 				continue;
 			}
@@ -860,60 +838,6 @@ gentity_t *G_Spawn( void ) {
 	G_InitGentity( e );
 	return e;
 }
-
-
-//Same as above, but only runs on vehicle slots.
-gentity_t *G_SpawnVehicle( void ) {
-	int			i, force;
-	gentity_t	*e;
-
-	e = NULL;	// shut up warning
-	i = 0;		// shut up warning
-	for ( force = 0 ; force < 2 ; force++ ) {
-		// if we go through all entities and can't find one to free,
-		// override the normal minimum times before use
-		e = &g_entities[MAX_CLIENTS];
-		for ( i = MAX_CLIENTS ; i<MAX_CLIENTS + MAX_VEHICLE_ENTS ; i++, e++) {
-			if ( e->inuse ) {
-				continue;
-			}
-
-			// the first couple seconds of server time can involve a lot of
-			// freeing and allocating, so relax the replacement policy
-			if ( !force && e->freetime > level.startTime + 2000 && level.time - e->freetime < 1000 )
-			{
-				continue;
-			}
-
-			// reuse this slot
-			G_InitGentity( e );
-			return e;
-		}
-		if ( i != MAX_CLIENTS + MAX_VEHICLE_ENTS ) {
-			break;
-		}
-	}
-	if ( i == MAX_CLIENTS + MAX_VEHICLE_ENTS ) {
-		/*
-		for (i = 0; i < MAX_GENTITIES; i++) {
-			G_Printf("%4i: %s\n", i, g_entities[i].classname);
-		}
-		*/
-		G_SpewEntList();
-		G_Error( "G_SpawnVehicle: no free vehicle entities" );
-	}
-	
-	// open up a new slot
-	level.num_entities++;
-
-	// let the server system know that there are more entities
-	trap_LocateGameData( level.gentities, level.num_entities, sizeof( gentity_t ), 
-		&level.clients[0].ps, sizeof( level.clients[0] ) );
-
-	G_InitGentity( e );
-	return e;
-}
-
 
 /*
 =================
@@ -1128,6 +1052,10 @@ gentity_t *G_TempEntity( vec3_t origin, int event ) {
 	VectorCopy( origin, snapped );
 	SnapVector( snapped );		// save network bandwidth
 	G_SetOrigin( e, snapped );
+	//WTF?  Why aren't we setting the s.origin? (like below)
+	//cg_events.c code checks origin all over the place!!!
+	//Trying to save bandwidth...?
+	//VectorCopy( snapped, e->s.origin );
 
 	// find cluster for PVS
 	trap_LinkEntity( e );
@@ -1143,8 +1071,6 @@ G_SoundTempEntity
 Special event entity that keeps sound trackers in mind
 =================
 */
-#include "../cgame/cg_local.h"
-#include "../client/cl_data.h"
 gentity_t *G_SoundTempEntity( vec3_t origin, int event, int channel ) {
 	gentity_t		*e;
 	vec3_t		snapped;
@@ -1153,8 +1079,6 @@ gentity_t *G_SoundTempEntity( vec3_t origin, int event, int channel ) {
 
 	e->s.eType = ET_EVENTS + event;
 	e->inuse = qtrue;
-
-	e->s.clientNum	= ClientManager::ActiveClientNum();
 
 	e->classname = "tempEntity";
 	e->eventTime = level.time;
@@ -1430,6 +1354,9 @@ void G_Sound( gentity_t *ent, int channel, int soundIndex ) {
 		ent->client->ps.fd.killSoundEntIndex[channel-50] = te->s.number;
 		te->s.trickedentindex = ent->s.number;
 		te->s.eFlags = EF_SOUNDTRACKER;
+		// fix: let other players know about this
+		// for case that they will meet this one
+		te->r.svFlags |= SVF_BROADCAST;
 		//te->freeAfterEvent = qfalse;
 	}
 }
@@ -1472,37 +1399,6 @@ void G_SoundOnEnt( gentity_t *ent, int channel, const char *soundPath )
 	te->s.trickedentindex = channel;
 
 }
-
-#ifdef _XBOX
-//-----------------------------
-void G_EntityPosition( int i, vec3_t ret )
-{
-	if ( /*g_entities &&*/ i >= 0 && i < MAX_GENTITIES && g_entities[i].inuse)
-	{
-#if 0	// VVFIXME - Do we really care about doing this? It's slow and unnecessary
-		gentity_t *ent = g_entities + i;
-
-		if (ent->bmodel)
-		{
-			vec3_t mins, maxs;
-			clipHandle_t h = CM_InlineModel( ent->s.modelindex );
-			CM_ModelBounds( cmg, h, mins, maxs );
-			ret[0] = (mins[0] + maxs[0]) / 2 + ent->currentOrigin[0];
-			ret[1] = (mins[1] + maxs[1]) / 2 + ent->currentOrigin[1];
-			ret[2] = (mins[2] + maxs[2]) / 2 + ent->currentOrigin[2];
-		}
-		else
-#endif
-		{
-			VectorCopy(g_entities[i].r.currentOrigin, ret);
-		}
-	}
-	else
-	{
-		ret[0] = ret[1] = ret[2] = 0;
-	}
-}
-#endif
 
 //==============================================================================
 
@@ -1756,7 +1652,7 @@ void TryUse( gentity_t *ent )
 	//Trace ahead to find a valid target
 	trap_Trace( &trace, src, vec3_origin, vec3_origin, dest, ent->s.number, MASK_OPAQUE|CONTENTS_SOLID|CONTENTS_BODY|CONTENTS_ITEM|CONTENTS_CORPSE );
 	
-	if ( trace.fraction == 1.0f || trace.entityNum >= ENTITYNUM_WORLD )	//trace.entityNum < 1 )
+	if ( trace.fraction == 1.0f || trace.entityNum == ENTITYNUM_NONE )
 	{
 		goto tryJetPack;
 	}

@@ -9,8 +9,7 @@
 
 #define		SIEGE_ROUND_BEGIN_TIME				5000 //delay 5 secs after players are in game.
 
-//#define		MAX_SIEGE_CLASSES					128 //up to 128 classes
-#define		MAX_SIEGE_CLASSES					64 //up to 128 classes
+#define		MAX_SIEGE_CLASSES					128 //up to 128 classes
 #define		MAX_SIEGE_CLASSES_PER_TEAM			16
 
 #define		MAX_SIEGE_TEAMS						16 //up to 16 diffent teams
@@ -42,11 +41,7 @@ typedef enum
 } siegeClassFlags_t;
 
 
-#ifdef _XBOX
-#define SIEGE_CLASS_DESC_LEN  512
-#else
 #define SIEGE_CLASS_DESC_LEN  4096
-#endif
 typedef struct
 {
 	char		desc[SIEGE_CLASS_DESC_LEN];
@@ -88,13 +83,12 @@ typedef struct
 	int			friendlyShader;
 } siegeTeam_t;
 
+
 extern siegeClass_t bgSiegeClasses[MAX_SIEGE_CLASSES];
 extern int bgNumSiegeClasses;
 
 extern siegeTeam_t bgSiegeTeams[MAX_SIEGE_TEAMS];
 extern int bgNumSiegeTeams;
-
-#include "../namespace_begin.h"
 
 int BG_SiegeGetValueGroup(char *buf, char *group, char *outbuf);
 int BG_SiegeGetPairedValue(char *buf, char *key, char *outbuf);
@@ -113,4 +107,3 @@ int BG_SiegeFindClassIndexByName(const char *classname);
 extern char	siege_info[MAX_SIEGE_INFO_SIZE];
 extern int	siege_valid;
 
-#include "../namespace_end.h"

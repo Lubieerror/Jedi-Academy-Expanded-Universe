@@ -5,16 +5,12 @@
 // be a valid snapshot this frame
 
 #include "cg_local.h"
-#include "../../ui/menudef.h"
+#include "ui/menudef.h"
 #if !defined(CL_LIGHT_H_INC)
 	#include "cg_lights.h"
 #endif
-#include "..\ghoul2\g2.h"
-#include "../ui/ui_public.h"
-
-#ifdef _XBOX
-#include "../client/cl_data.h"
-#endif
+#include "ghoul2/G2.h"
+#include "ui/ui_public.h"
 
 /*
 =================
@@ -25,49 +21,49 @@ CG_ParseScores
 static void CG_ParseScores( void ) {
 	int		i, powerups, readScores;
 
-	cg->numScores = atoi( CG_Argv( 1 ) );
+	cg.numScores = atoi( CG_Argv( 1 ) );
 
-	readScores = cg->numScores;
+	readScores = cg.numScores;
 
 	if (readScores > MAX_CLIENT_SCORE_SEND)
 	{
 		readScores = MAX_CLIENT_SCORE_SEND;
 	}
 
-	if ( cg->numScores > MAX_CLIENTS ) {
-		cg->numScores = MAX_CLIENTS;
+	if ( cg.numScores > MAX_CLIENTS ) {
+		cg.numScores = MAX_CLIENTS;
 	}
 
-	cg->numScores = readScores;
+	cg.numScores = readScores;
 
-	cg->teamScores[0] = atoi( CG_Argv( 2 ) );
-	cg->teamScores[1] = atoi( CG_Argv( 3 ) );
+	cg.teamScores[0] = atoi( CG_Argv( 2 ) );
+	cg.teamScores[1] = atoi( CG_Argv( 3 ) );
 
-	memset( cg->scores, 0, sizeof( cg->scores ) );
+	memset( cg.scores, 0, sizeof( cg.scores ) );
 	for ( i = 0 ; i < readScores ; i++ ) {
 		//
-		cg->scores[i].client = atoi( CG_Argv( i * 14 + 4 ) );
-		cg->scores[i].score = atoi( CG_Argv( i * 14 + 5 ) );
-		cg->scores[i].ping = atoi( CG_Argv( i * 14 + 6 ) );
-		cg->scores[i].time = atoi( CG_Argv( i * 14 + 7 ) );
-		cg->scores[i].scoreFlags = atoi( CG_Argv( i * 14 + 8 ) );
+		cg.scores[i].client = atoi( CG_Argv( i * 14 + 4 ) );
+		cg.scores[i].score = atoi( CG_Argv( i * 14 + 5 ) );
+		cg.scores[i].ping = atoi( CG_Argv( i * 14 + 6 ) );
+		cg.scores[i].time = atoi( CG_Argv( i * 14 + 7 ) );
+		cg.scores[i].scoreFlags = atoi( CG_Argv( i * 14 + 8 ) );
 		powerups = atoi( CG_Argv( i * 14 + 9 ) );
-		cg->scores[i].accuracy = atoi(CG_Argv(i * 14 + 10));
-		cg->scores[i].impressiveCount = atoi(CG_Argv(i * 14 + 11));
-		cg->scores[i].excellentCount = atoi(CG_Argv(i * 14 + 12));
-		cg->scores[i].guantletCount = atoi(CG_Argv(i * 14 + 13));
-		cg->scores[i].defendCount = atoi(CG_Argv(i * 14 + 14));
-		cg->scores[i].assistCount = atoi(CG_Argv(i * 14 + 15));
-		cg->scores[i].perfect = atoi(CG_Argv(i * 14 + 16));
-		cg->scores[i].captures = atoi(CG_Argv(i * 14 + 17));
+		cg.scores[i].accuracy = atoi(CG_Argv(i * 14 + 10));
+		cg.scores[i].impressiveCount = atoi(CG_Argv(i * 14 + 11));
+		cg.scores[i].excellentCount = atoi(CG_Argv(i * 14 + 12));
+		cg.scores[i].guantletCount = atoi(CG_Argv(i * 14 + 13));
+		cg.scores[i].defendCount = atoi(CG_Argv(i * 14 + 14));
+		cg.scores[i].assistCount = atoi(CG_Argv(i * 14 + 15));
+		cg.scores[i].perfect = atoi(CG_Argv(i * 14 + 16));
+		cg.scores[i].captures = atoi(CG_Argv(i * 14 + 17));
 
-		if ( cg->scores[i].client < 0 || cg->scores[i].client >= MAX_CLIENTS ) {
-			cg->scores[i].client = 0;
+		if ( cg.scores[i].client < 0 || cg.scores[i].client >= MAX_CLIENTS ) {
+			cg.scores[i].client = 0;
 		}
-		cgs.clientinfo[ cg->scores[i].client ].score = cg->scores[i].score;
-		cgs.clientinfo[ cg->scores[i].client ].powerups = powerups;
+		cgs.clientinfo[ cg.scores[i].client ].score = cg.scores[i].score;
+		cgs.clientinfo[ cg.scores[i].client ].powerups = powerups;
 
-		cg->scores[i].team = cgs.clientinfo[cg->scores[i].client].team;
+		cg.scores[i].team = cgs.clientinfo[cg.scores[i].client].team;
 	}
 	CG_SetScoreSelection(NULL);
 }
@@ -107,9 +103,9 @@ and whenever the server updates any serverinfo flagged cvars
 ================
 */
 void CG_ParseServerinfo( void ) {
-	const char	*info;
-	const char	*tinfo;
-	char	*mapname;
+	const char *info = NULL, *tinfo = NULL;
+	char *mapname;
+	int i;
 
 	info = CG_ConfigString( CS_SERVERINFO );
 
@@ -117,10 +113,6 @@ void CG_ParseServerinfo( void ) {
 	cgs.stepSlideFix = atoi( Info_ValueForKey( info, "g_stepSlideFix" ) );
 
 	cgs.noSpecMove = atoi( Info_ValueForKey( info, "g_noSpecMove" ) );
-
-	trap_Cvar_Set("g_WeaponDisable", Info_ValueForKey( info, "g_WeaponDisable"));
-	trap_Cvar_Set("g_allowVote", Info_ValueForKey( info, "g_allowVote" ));
-	trap_Cvar_Set("mapname", Info_ValueForKey( info, "mapname"));
 
 	trap_Cvar_Set("bg_fighterAltControl", Info_ValueForKey( info, "bg_fighterAltControl" ));
 
@@ -135,11 +127,21 @@ void CG_ParseServerinfo( void ) {
 	cgs.wDisable = atoi( Info_ValueForKey( info, "wdisable" ) );
 	cgs.fDisable = atoi( Info_ValueForKey( info, "fdisable" ) );
 	cgs.dmflags = atoi( Info_ValueForKey( info, "dmflags" ) );
-	cgs.teamflags = atoi( Info_ValueForKey( info, "teamflags" ) );
-	cgs.fraglimit = atoi( Info_ValueForKey( info, "fraglimit" ) );
 	cgs.duel_fraglimit = atoi( Info_ValueForKey( info, "duel_fraglimit" ) );
 	cgs.capturelimit = atoi( Info_ValueForKey( info, "capturelimit" ) );
-	cgs.timelimit = atoi( Info_ValueForKey( info, "timelimit" ) );
+
+	// reset fraglimit warnings
+	i = atoi( Info_ValueForKey( info, "fraglimit" ) );
+	if ( cgs.fraglimit < i )
+		cg.fraglimitWarnings &= ~(1|2|4);
+	cgs.fraglimit = i;
+
+	// reset timelimit warnings
+	i = atoi( Info_ValueForKey( info, "timelimit" ) );
+	if ( cgs.timelimit != i )
+		cg.timelimitWarnings &= ~(1|2);
+	cgs.timelimit = i;
+
 	cgs.maxclients = atoi( Info_ValueForKey( info, "sv_maxclients" ) );
 	mapname = Info_ValueForKey( info, "mapname" );
 
@@ -147,10 +149,10 @@ void CG_ParseServerinfo( void ) {
 	trap_Cvar_Set ( "ui_about_mapname", mapname );
 
 	Com_sprintf( cgs.mapname, sizeof( cgs.mapname ), "maps/%s.bsp", mapname );
-	Q_strncpyz( cgs.redTeam, Info_ValueForKey( info, "g_redTeam" ), sizeof(cgs.redTeam) );
-	trap_Cvar_Set("g_redTeam", cgs.redTeam);
-	Q_strncpyz( cgs.blueTeam, Info_ValueForKey( info, "g_blueTeam" ), sizeof(cgs.blueTeam) );
-	trap_Cvar_Set("g_blueTeam", cgs.blueTeam);
+//	Q_strncpyz( cgs.redTeam, Info_ValueForKey( info, "g_redTeam" ), sizeof(cgs.redTeam) );
+//	trap_Cvar_Set("g_redTeam", cgs.redTeam);
+//	Q_strncpyz( cgs.blueTeam, Info_ValueForKey( info, "g_blueTeam" ), sizeof(cgs.blueTeam) );
+//	trap_Cvar_Set("g_blueTeam", cgs.blueTeam);
 
 	trap_Cvar_Set ( "ui_about_gametype", va("%i", cgs.gametype ) );
 	trap_Cvar_Set ( "ui_about_fraglimit", va("%i", cgs.fraglimit ) );
@@ -170,13 +172,13 @@ void CG_ParseServerinfo( void ) {
 	tinfo = CG_ConfigString( CS_TERRAINS + 1 );
 	if ( !tinfo || !*tinfo )
 	{
-		cg->mInRMG = qfalse;
+		cg.mInRMG = qfalse;
 	}
 	else
 	{
 		int weather = 0;
 
-		cg->mInRMG = qtrue;
+		cg.mInRMG = qtrue;
 		trap_Cvar_Set("RMG", "1");
 
 		weather = atoi( Info_ValueForKey( info, "RMG_weather" ) );
@@ -185,13 +187,16 @@ void CG_ParseServerinfo( void ) {
 
 		if (weather == 1 || weather == 2)
 		{
-			cg->mRMGWeather = qtrue;
+			cg.mRMGWeather = qtrue;
 		}
 		else
 		{
-			cg->mRMGWeather = qfalse;
+			cg.mRMGWeather = qfalse;
 		}
 	}
+
+	//Raz: Fix bogus vote strings
+	Q_strncpyz( cgs.voteString, CG_ConfigString( CS_VOTE_STRING ), sizeof( cgs.voteString ) );
 }
 
 /*
@@ -206,10 +211,20 @@ static void CG_ParseWarmup( void ) {
 	info = CG_ConfigString( CS_WARMUP );
 
 	warmup = atoi( info );
-	cg->warmupCount = -1;
+	cg.warmupCount = -1;
 
-	cg->warmup = warmup;
+	cg.warmup = warmup;
 }
+
+//Raz: This is a reverse map of flag statuses as seen in g_team.c
+//static char ctfFlagStatusRemap[] = { '0', '1', '*', '*', '2' };
+static char ctfFlagStatusRemap[] = { 	
+	FLAG_ATBASE,
+	FLAG_TAKEN,			// CTF
+	// server doesn't use FLAG_TAKEN_RED or FLAG_TAKEN_BLUE
+	// which was originally for 1-flag CTF.
+	FLAG_DROPPED
+};
 
 /*
 ================
@@ -227,11 +242,21 @@ void CG_SetConfigValues( void )
 	cgs.scores2 = atoi( CG_ConfigString( CS_SCORES2 ) );
 	cgs.levelStartTime = atoi( CG_ConfigString( CS_LEVEL_START_TIME ) );
 	if( cgs.gametype == GT_CTF || cgs.gametype == GT_CTY ) {
+		int redflagId = 0, blueflagId = 0;
+
 		s = CG_ConfigString( CS_FLAGSTATUS );
-		cgs.redflag = s[0] - '0';
-		cgs.blueflag = s[1] - '0';
+
+		redflagId = s[0] - '0';
+		blueflagId = s[1] - '0';
+
+		// fix: proper flag statuses mapping for dropped flag
+		if ( redflagId >= 0 && redflagId < ARRAY_LEN( ctfFlagStatusRemap ) ) 
+			cgs.redflag = ctfFlagStatusRemap[redflagId];
+
+		if ( blueflagId >= 0 && blueflagId < ARRAY_LEN( ctfFlagStatusRemap ) ) 
+			cgs.blueflag = ctfFlagStatusRemap[blueflagId];
 	}
-	cg->warmup = atoi( CG_ConfigString( CS_WARMUP ) );
+	cg.warmup = atoi( CG_ConfigString( CS_WARMUP ) );
 
 	// Track who the jedi master is
 	cgs.jediMaster = atoi ( CG_ConfigString ( CS_CLIENT_JEDIMASTER ) );
@@ -663,32 +688,6 @@ void SetDuelistHealthsFromConfigString ( const char *str ) {
 	cgs.duelist3health = atoi ( buf );
 }
 
-
-static void CG_SetUIVoteCvar(void)
-{
-	const char *str;
-
-	if(!strncmp(cgs.voteString, "g_gametype", 10)) {
-		str = CG_GetStringEdString("MP_SVGAME", "VOTE_GAMETYPE");
-		Cvar_Set("vote_strref", va(str, cgs.voteCaller, cgs.voteString + 11));
-	} else if(!strncmp(cgs.voteString, "map_restart", 11)) {
-		str = CG_GetStringEdString("MP_SVGAME", "VOTE_MAP_RESTART");
-		Cvar_Set("vote_strref", va(str, cgs.voteCaller));
-	} else if(!strncmp(cgs.voteString, "vstr nextmap", 12)) {
-		str = CG_GetStringEdString("MP_SVGAME", "VOTE_NEXT_MAP");
-		Cvar_Set("vote_strref", va(str, cgs.voteCaller));
-	} else if(!strncmp(cgs.voteString, "g_doWarmup", 10)) {
-		str = CG_GetStringEdString("MP_SVGAME", "VOTE_DO_WARMUP");
-		Cvar_Set("vote_strref", va(str, cgs.voteCaller));
-	} else if(!strncmp(cgs.voteString, "map", 3)) {
-		str = CG_GetStringEdString("MP_SVGAME", "VOTE_MAP");
-		Cvar_Set("vote_strref", va(str, cgs.voteCaller, cgs.voteString + 4));
-	} else if(!strncmp(cgs.voteString, "kick", 4)) {
-		str = CG_GetStringEdString("MP_SVGAME", "VOTE_KICK");
-		Cvar_Set("vote_strref", va(str, cgs.voteCaller, cgs.voteString + 5));
-	}
-}
-
 /*
 ================
 CG_ConfigStringModified
@@ -793,10 +792,6 @@ static void CG_ConfigStringModified( void ) {
 		cgs.voteModified = qtrue;
 	} else if ( num == CS_VOTE_STRING ) {
 		Q_strncpyz( cgs.voteString, str, sizeof( cgs.voteString ) );
-		CG_SetUIVoteCvar();
-	} else if ( num == CS_VOTE_CALLER ) {
-		Q_strncpyz( cgs.voteCaller, str, sizeof( cgs.voteCaller ) );
-		CG_SetUIVoteCvar();
 	} else if ( num >= CS_TEAMVOTE_TIME && num <= CS_TEAMVOTE_TIME + 1) {
 		cgs.teamVoteTime[num-CS_TEAMVOTE_TIME] = atoi( str );
 		cgs.teamVoteModified[num-CS_TEAMVOTE_TIME] = qtrue;
@@ -809,7 +804,7 @@ static void CG_ConfigStringModified( void ) {
 	} else if ( num >= CS_TEAMVOTE_STRING && num <= CS_TEAMVOTE_STRING + 1) {
 		Q_strncpyz( cgs.teamVoteString[num-CS_TEAMVOTE_STRING], str, sizeof( cgs.teamVoteString ) );
 	} else if ( num == CS_INTERMISSION ) {
-		cg->intermissionStarted = atoi( str );
+		cg.intermissionStarted = atoi( str );
 	} else if ( num >= CS_MODELS && num < CS_MODELS+MAX_MODELS ) {
 		char modelName[MAX_QPATH];
 		strcpy(modelName, str);
@@ -883,8 +878,14 @@ static void CG_ConfigStringModified( void ) {
 	} else if ( num == CS_FLAGSTATUS ) {
 		if( cgs.gametype == GT_CTF || cgs.gametype == GT_CTY ) {
 			// format is rb where its red/blue, 0 is at base, 1 is taken, 2 is dropped
-			cgs.redflag = str[0] - '0';
-			cgs.blueflag = str[1] - '0';
+			int redflagId = str[0] - '0', blueflagId = str[1] - '0';
+
+			//Raz: improved flag status remapping
+			if ( redflagId >= 0 && redflagId < ARRAY_LEN( ctfFlagStatusRemap ) ) 
+				cgs.redflag = ctfFlagStatusRemap[redflagId];
+
+			if ( blueflagId >= 0 && blueflagId < ARRAY_LEN( ctfFlagStatusRemap ) )  
+				cgs.blueflag = ctfFlagStatusRemap[blueflagId];
 		}
 	}
 	else if ( num == CS_SHADERSTATE ) {
@@ -1004,15 +1005,8 @@ void CG_KillCEntityInstances(void)
 		cent->trailTime = 0;
 		cent->frame_hold_time = 0;
 		cent->frame_hold_refreshed = 0;
-#ifdef _XBOX
-		cent->trickAlpha[0] = 0;
-		cent->trickAlpha[1] = 0;
-		cent->trickAlphaTime[0] = 0;
-		cent->trickAlphaTime[1] = 0;
-#else
 		cent->trickAlpha = 0;
 		cent->trickAlphaTime = 0;
-#endif
 		VectorClear(cent->turAngles);
 		cent->weapon = 0;
 		cent->teamPowerEffectTime = 0;
@@ -1037,7 +1031,7 @@ require a reload of all the media
 ===============
 */
 static void CG_MapRestart( void ) {
-	if ( cg_showmiss.integer ) {
+	if ( cg_showMiss.integer ) {
 		CG_Printf( "CG_MapRestart\n" );
 	}
 
@@ -1050,15 +1044,15 @@ static void CG_MapRestart( void ) {
 	CG_KillCEntityInstances();
 
 	// make sure the "3 frags left" warnings play again
-	cg->fraglimitWarnings = 0;
+	cg.fraglimitWarnings = 0;
 
-	cg->timelimitWarnings = 0;
+	cg.timelimitWarnings = 0;
 
-	cg->intermissionStarted = qfalse;
+	cg.intermissionStarted = qfalse;
 
 	cgs.voteTime = 0;
 
-	cg->mapRestart = qtrue;
+	cg.mapRestart = qtrue;
 
 	CG_StartMusic(qtrue);
 
@@ -1067,22 +1061,19 @@ static void CG_MapRestart( void ) {
 	// we really should clear more parts of cg here and stop sounds
 
 	// play the "fight" sound if this is a restart without warmup
-	if ( cg->warmup == 0 && cgs.gametype != GT_SIEGE && cgs.gametype != GT_POWERDUEL/* && cgs.gametype == GT_DUEL */) {
+	if ( cg.warmup == 0 && cgs.gametype != GT_SIEGE && cgs.gametype != GT_POWERDUEL/* && cgs.gametype == GT_DUEL */) {
 		trap_S_StartLocalSound( cgs.media.countFightSound, CHAN_ANNOUNCER );
 		CG_CenterPrint( CG_GetStringEdString("MP_SVGAME", "BEGIN_DUEL"), 120, GIANTCHAR_WIDTH*2 );
 	}
 	/*
 	if (cg_singlePlayerActive.integer) {
-		trap_Cvar_Set("ui_matchStartTime", va("%i", cg->time));
+		trap_Cvar_Set("ui_matchStartTime", va("%i", cg.time));
 		if (cg_recordSPDemo.integer && cg_recordSPDemoName.string && *cg_recordSPDemoName.string) {
 			trap_SendConsoleCommand(va("set g_synchronousclients 1 ; record %s \n", cg_recordSPDemoName.string));
 		}
 	}
 	*/
-	trap_Cvar_Set("cg_thirdPerson", "0");
-#ifdef _XBOX
-	ClientManager::ActiveClient().cg_thirdPerson = 0;
-#endif
+//	trap_Cvar_Set("cg_thirdPerson", "0");
 }
 
 /*
@@ -1231,9 +1222,6 @@ static void CG_BodyQueueCopy(centity_t *cent, int clientNum, int knownWeapon)
 	}
 	else if (trap_G2API_HasGhoul2ModelOnIndex(&(cent->ghoul2), 1))
 	{
-//#ifdef _XBOX
-//		if(ClientManager::ActiveClientNum() == 0)
-//#endif
 		trap_G2API_CopySpecificGhoul2Model(CG_G2WeaponInstance(cent, knownWeapon), 0, cent->ghoul2, 1);
 	}
 
@@ -1282,9 +1270,9 @@ static void CG_BodyQueueCopy(centity_t *cent, int clientNum, int knownWeapon)
 		//	aNum = (anim->firstFrame+anim->numFrames)-1;
 		//}
 
-		trap_G2API_SetBoneAnim(cent->ghoul2, 0, "upper_lumbar", aNum, eFrame, flags, animSpeed, cg->time, -1, 150);
-		trap_G2API_SetBoneAnim(cent->ghoul2, 0, "model_root", aNum, eFrame, flags, animSpeed, cg->time, -1, 150);
-		trap_G2API_SetBoneAnim(cent->ghoul2, 0, "Motion", aNum, eFrame, flags, animSpeed, cg->time, -1, 150);
+		trap_G2API_SetBoneAnim(cent->ghoul2, 0, "upper_lumbar", aNum, eFrame, flags, animSpeed, cg.time, -1, 150);
+		trap_G2API_SetBoneAnim(cent->ghoul2, 0, "model_root", aNum, eFrame, flags, animSpeed, cg.time, -1, 150);
+		trap_G2API_SetBoneAnim(cent->ghoul2, 0, "Motion", aNum, eFrame, flags, animSpeed, cg.time, -1, 150);
 	}
 
 	//After we create the bodyqueue, regenerate any limbs on the real instance
@@ -1368,7 +1356,7 @@ static void CG_ServerCommand( void ) {
 
 	if ( !strcmp( cmd, "spc" ) )
 	{
-		ClientManager::ActiveClient().myTeam = 3;
+		trap_Cvar_Set("ui_myteam", "3");
 		trap_OpenUIMenu(UIMENU_PLAYERCONFIG); //UIMENU_CLASSSEL
 		return;
 	}
@@ -1393,11 +1381,7 @@ static void CG_ServerCommand( void ) {
 
 		trap_Cvar_Set("ui_rankChange", va("%i", newRank));
 
-		ClientManager::ActiveClient().myTeam = setTeam;
-		if ( setTeam == 3)
-			ClientManager::ActiveClient().isSpectating = qtrue;
-		else
-			ClientManager::ActiveClient().isSpectating = qfalse;
+		trap_Cvar_Set("ui_myteam", va("%i", setTeam));
 
 		if (!( trap_Key_GetCatcher() & KEYCATCH_UI ) && doMenu)
 		{
@@ -1599,14 +1583,7 @@ static void CG_ServerCommand( void ) {
 	if ( !strcmp( cmd, "print" ) ) {
 		char strEd[MAX_STRINGED_SV_STRING];
 		CG_CheckSVStringEdRef(strEd, CG_Argv(1));
-
-		//Hack!  No other way to differentiate important print commands from
-		//annoying ones?
-		if(strstr(CG_Argv(1), "VOTE")) {
-			CG_PrintfAlways( "%s", strEd );
-		} else {
-			CG_Printf( "%s", strEd );
-		}
+		CG_Printf( "%s", strEd );
 		return;
 	}
 
@@ -1644,19 +1621,19 @@ static void CG_ServerCommand( void ) {
 				return;
 			}
 
-			strcpy(name, CG_Argv(1));
-			strcpy(loc, CG_Argv(2));
-			strcpy(color, CG_Argv(3));
-			strcpy(message, CG_Argv(4));
+			Q_strncpyz( name, CG_Argv( 1 ), sizeof( name ) );
+			Q_strncpyz( loc, CG_Argv( 2 ), sizeof( loc ) );
+			Q_strncpyz( color, CG_Argv( 3 ), sizeof( color ) );
+			Q_strncpyz( message, CG_Argv( 4 ), sizeof( message ) );
 
 			if (loc[0] == '@')
 			{ //get localized text
-				trap_SP_GetStringTextString(loc+1, loc, MAX_STRING_CHARS);
+				trap_SP_GetStringTextString(loc+1, loc, sizeof( loc ) );
 			}
 
 			trap_S_StartLocalSound( cgs.media.talkSound, CHAN_LOCAL_SOUND );
 			//Q_strncpyz( text, CG_Argv(1), MAX_SAY_TEXT );
-			Com_sprintf(text, MAX_SAY_TEXT, "%s<%s>^%s%s", name, loc, color, message);
+			Com_sprintf(text, sizeof( text ), "%s^7<%s> ^%s%s", name, loc, color, message);
 			CG_RemoveChatEscapeChar( text );
 			CG_ChatBox_AddString(text);
 			CG_Printf( "*%s\n", text );
@@ -1674,19 +1651,19 @@ static void CG_ServerCommand( void ) {
 			return;
 		}
 
-		strcpy(name, CG_Argv(1));
-		strcpy(loc, CG_Argv(2));
-		strcpy(color, CG_Argv(3));
-		strcpy(message, CG_Argv(4));
+		Q_strncpyz( name, CG_Argv( 1 ), sizeof( name ) );
+		Q_strncpyz( loc, CG_Argv( 2 ), sizeof( loc ) );
+		Q_strncpyz( color, CG_Argv( 3 ), sizeof( color ) );
+		Q_strncpyz( message, CG_Argv( 4 ), sizeof( message ) );
 
 		if (loc[0] == '@')
 		{ //get localized text
-			trap_SP_GetStringTextString(loc+1, loc, MAX_STRING_CHARS);
+			trap_SP_GetStringTextString(loc+1, loc, sizeof( loc ) );
 		}
 
 		trap_S_StartLocalSound( cgs.media.talkSound, CHAN_LOCAL_SOUND );
 		//Q_strncpyz( text, CG_Argv(1), MAX_SAY_TEXT );
-		Com_sprintf(text, MAX_SAY_TEXT, "%s<%s> ^%s%s", name, loc, color, message);
+		Com_sprintf(text, sizeof( text ), "%s^7<%s> ^%s%s", name, loc, color, message);
 		CG_RemoveChatEscapeChar( text );
 		CG_ChatBox_AddString(text);
 		CG_Printf( "*%s\n", text );
@@ -1709,11 +1686,28 @@ static void CG_ServerCommand( void ) {
 		return;
 	}
 
-  if ( Q_stricmp (cmd, "remapShader") == 0 ) {
+	//Raz: Buffer overflow fix
+#if 0
+	if ( Q_stricmp (cmd, "remapShader") == 0 ) {
 		if (trap_Argc() == 4) {
 			trap_R_RemapShader(CG_Argv(1), CG_Argv(2), CG_Argv(3));
 		}
 	}
+#else
+	if ( !Q_stricmp( cmd, "remapShader" ) )
+	{
+		if ( trap_Argc() == 4 )
+		{
+			char shader1[MAX_QPATH];
+			char shader2[MAX_QPATH];
+			Q_strncpyz( shader1, CG_Argv( 1 ), sizeof( shader1 ) );
+			Q_strncpyz( shader2, CG_Argv( 2 ), sizeof( shader2 ) );
+			trap_R_RemapShader( shader1, shader2, CG_Argv( 3 ) );
+			return;
+		}
+		return;
+	}
+#endif
 
 	// loaddeferred can be both a servercmd and a consolecmd
 	if ( !strcmp( cmd, "loaddefered" ) ) {	// FIXME: spelled wrong, but not changing for demo
@@ -1724,7 +1718,7 @@ static void CG_ServerCommand( void ) {
 	// clientLevelShot is sent before taking a special screenshot for
 	// the menu system during development
 	if ( !strcmp( cmd, "clientLevelShot" ) ) {
-		cg->levelShot = qtrue;
+		cg.levelShot = qtrue;
 		return;
 	}
 
@@ -1741,24 +1735,9 @@ with this this snapshot.
 ====================
 */
 void CG_ExecuteNewServerCommands( int latestSequence ) {
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue)
-	{
-		while ( ClientManager::ActiveClient().serverCommandSequence < latestSequence ) {
-			if ( trap_GetServerCommand( ++ClientManager::ActiveClient().serverCommandSequence ) ) {
-				CG_ServerCommand();
-			}
-		}
-	}
-	else
-	{
-#endif
 	while ( cgs.serverCommandSequence < latestSequence ) {
 		if ( trap_GetServerCommand( ++cgs.serverCommandSequence ) ) {
 			CG_ServerCommand();
 		}
 	}
-#ifdef _XBOX
-	}
-#endif
 }

@@ -1,17 +1,12 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 // sv_client.c -- server code for dealing with clients
 
 #include "server.h"
-#include "../qcommon/stringed_ingame.h"
-#include "../RMG/RM_Headers.h"
-#include "../zlib32/zip.h"
-
-#ifdef _XBOX
-#include "../cgame/cg_local.h"
-#include "../client/cl_data.h"
-#endif
+#include "qcommon/stringed_ingame.h"
+#include "RMG/RM_Headers.h"
+#include "zlib32/zip.h"
 
 static void SV_CloseDownload( client_t *cl );
 
@@ -83,55 +78,6 @@ void SV_GetChallenge( netadr_t from ) {
 		NET_OutOfBandPrint( NS_SERVER, from, "challengeResponse %i", challenge->challenge );
 		return;
 	}
-
-#ifdef USE_CD_KEY
-	// look up the authorize server's IP
-	if ( !svs.authorizeAddress.ip[0] && svs.authorizeAddress.type != NA_BAD ) {
-		Com_Printf( "Resolving %s\n", AUTHORIZE_SERVER_NAME );
-		if ( !NET_StringToAdr( AUTHORIZE_SERVER_NAME, &svs.authorizeAddress ) ) {
-			Com_Printf( "Couldn't resolve address\n" );
-			return;
-		}
-		svs.authorizeAddress.port = BigShort( PORT_AUTHORIZE );
-		Com_Printf( "%s resolved to %i.%i.%i.%i:%i\n", AUTHORIZE_SERVER_NAME,
-			svs.authorizeAddress.ip[0], svs.authorizeAddress.ip[1],
-			svs.authorizeAddress.ip[2], svs.authorizeAddress.ip[3],
-			BigShort( svs.authorizeAddress.port ) );
-	}
-
-	// if they have been challenging for a long time and we
-	// haven't heard anything from the authoirze server, go ahead and
-	// let them in, assuming the id server is down
-	if ( svs.time - challenge->firstTime > AUTHORIZE_TIMEOUT ) {
-		Com_DPrintf( "authorize server timed out\n" );
-
-		challenge->pingTime = svs.time;
-		NET_OutOfBandPrint( NS_SERVER, challenge->adr, 
-			"challengeResponse %i", challenge->challenge );
-		return;
-	}
-
-	// otherwise send their ip to the authorize server
-	if ( svs.authorizeAddress.type != NA_BAD ) {
-		cvar_t	*fs;
-		char	game[1024];
-
-		game[0] = 0;
-		fs = Cvar_Get ("fs_game", "", CVAR_INIT|CVAR_SYSTEMINFO );
-		if (fs && fs->string[0] != 0) {
-			strcpy(game, fs->string);
-		}
-		Com_DPrintf( "sending getIpAuthorize for %s\n", NET_AdrToString( from ));
-		fs = Cvar_Get ("sv_allowAnonymous", "0", CVAR_SERVERINFO);
-
-		NET_OutOfBandPrint( NS_SERVER, svs.authorizeAddress,
-			"getIpAuthorize %i %i.%i.%i.%i %s %s",  svs.challenges[i].challenge,
-			from.ip[0], from.ip[1], from.ip[2], from.ip[3], game, fs->integer );
-	}
-#else
-	challenge->pingTime = svs.time;
-	NET_OutOfBandPrint( NS_SERVER, challenge->adr, "challengeResponse %i", challenge->challenge );
-#endif	// USE_CD_KEY
 }
 
 /*
@@ -143,7 +89,6 @@ If we have a challenge adr for that ip, send the
 challengeResponse to it
 ====================
 */
-#ifndef _XBOX	// No authorization on Xbox
 void SV_AuthorizeIpPacket( netadr_t from ) {
 	int		challenge;
 	int		i;
@@ -174,12 +119,6 @@ void SV_AuthorizeIpPacket( netadr_t from ) {
 	r = Cmd_Argv( 3 );			// reason
 
 	if ( !Q_stricmp( s, "demo" ) ) {
-		if ( Cvar_VariableValue( "fs_restrict" ) ) {
-			// a demo client connecting to a demo server
-			NET_OutOfBandPrint( NS_SERVER, svs.challenges[i].adr, 
-				"challengeResponse %i", svs.challenges[i].challenge );
-			return;
-		}
 		// they are a demo client trying to connect to a real server
 		NET_OutOfBandPrint( NS_SERVER, svs.challenges[i].adr, "print\nServer is not a demo server\n" );
 		// clear the challenge record so it won't timeout and let them through
@@ -193,7 +132,7 @@ void SV_AuthorizeIpPacket( netadr_t from ) {
 	}
 	if ( !Q_stricmp( s, "unknown" ) ) {
 		if (!r) {
-			NET_OutOfBandPrint( NS_SERVER, svs.challenges[i].adr, "print\nAwaiting CD key authorization\n" );
+			NET_OutOfBandPrint( NS_SERVER, svs.challenges[i].adr, "print\nAwaiting Authorization\n" );
 		} else {
 			sprintf(ret, "print\n%s\n", r);
 			NET_OutOfBandPrint( NS_SERVER, svs.challenges[i].adr, ret );
@@ -205,7 +144,7 @@ void SV_AuthorizeIpPacket( netadr_t from ) {
 
 	// authorization failed
 	if (!r) {
-		NET_OutOfBandPrint( NS_SERVER, svs.challenges[i].adr, "print\nSomeone is using this CD Key\n" );
+		NET_OutOfBandPrint( NS_SERVER, svs.challenges[i].adr, "print\nAuthorization Failed\n" );
 	} else {
 		sprintf(ret, "print\n%s\n", r);
 		NET_OutOfBandPrint( NS_SERVER, svs.challenges[i].adr, ret );
@@ -214,7 +153,6 @@ void SV_AuthorizeIpPacket( netadr_t from ) {
 	// clear the challenge record so it won't timeout and let them through
 	Com_Memset( &svs.challenges[i], 0, sizeof( svs.challenges[i] ) );
 }
-#endif
 
 /*
 ==================
@@ -227,17 +165,20 @@ void SV_DirectConnect( netadr_t from ) {
 	char		userinfo[MAX_INFO_STRING];
 	int			i;
 	client_t	*cl, *newcl;
-	client_t	*pTemp = (client_t *) Z_Malloc( sizeof(client_t), TAG_TEMP_WORKSPACE, qfalse, 4 );
-	client_t	&temp(*pTemp);
+	MAC_STATIC client_t	temp;
 	sharedEntity_t *ent;
 	int			clientNum;
 	int			version;
 	int			qport;
 	int			challenge;
+	char		*password;
 	int			startIndex;
 	char		*denied;
 	int			count;
+	char		*ip;
+#ifdef _XBOX
 	bool		reconnect = false;
+#endif
 
 	Com_DPrintf ("SVC_DirectConnect ()\n");
 
@@ -245,9 +186,8 @@ void SV_DirectConnect( netadr_t from ) {
 
 	version = atoi( Info_ValueForKey( userinfo, "protocol" ) );
 	if ( version != PROTOCOL_VERSION ) {
-		NET_OutOfBandPrint( NS_SERVER, from, "xProtocol\n" );
+		NET_OutOfBandPrint( NS_SERVER, from, "print\nServer uses protocol version %i.\n", PROTOCOL_VERSION );
 		Com_DPrintf ("    rejected connect from version %i\n", version);
-		Z_Free(pTemp);
 		return;
 	}
 
@@ -271,14 +211,26 @@ void SV_DirectConnect( netadr_t from ) {
 			|| from.port == cl->netchan.remoteAddress.port ) ) {
 			if (( svs.time - cl->lastConnectTime) 
 				< (sv_reconnectlimit->integer * 1000)) {
-				NET_OutOfBandPrint( NS_SERVER, from, "xToosoon\n" );
+				NET_OutOfBandPrint( NS_SERVER, from, "print\nReconnect rejected : too soon\n" );
 				Com_DPrintf ("%s:reconnect rejected : too soon\n", NET_AdrToString (from));
-				Z_Free(pTemp);
 				return;
 			}
 			break;
 		}
 	}
+
+	// don't let "ip" overflow userinfo string
+	if ( NET_IsLocalAddress (from) )
+		ip = "localhost";
+	else
+		ip = (char *)NET_AdrToString( from );
+	if( ( strlen( ip ) + strlen( userinfo ) + 4 ) >= MAX_INFO_STRING ) {
+		NET_OutOfBandPrint( NS_SERVER, from,
+			"print\nUserinfo string length exceeded.  "
+			"Try removing setu cvars from your config.\n" );
+		return;
+	}
+	Info_SetValueForKey( userinfo, "ip", ip );
 
 	// see if the challenge is valid (LAN clients don't need to challenge)
 	if ( !NET_IsLocalAddress (from) ) {
@@ -293,16 +245,11 @@ void SV_DirectConnect( netadr_t from ) {
 		}
 		if (i == MAX_CHALLENGES) {
 			NET_OutOfBandPrint( NS_SERVER, from, "print\nNo or bad challenge for address.\n" );
-			Z_Free(pTemp);
 			return;
 		}
-		// force the IP key/value pair so the game can filter based on ip
-		Info_SetValueForKey( userinfo, "ip", NET_AdrToString( from ) );
 
 		ping = svs.time - svs.challenges[i].pingTime;
-#ifndef FINAL_BUILD
 		Com_Printf( SE_GetString("MP_SVGAME", "CLIENT_CONN_WITH_PING"), i, ping);//"Client %i connecting with %i challenge ping\n", i, ping );
-#endif
 		svs.challenges[i].connected = qtrue;
 
 		// never reject a LAN client based on ping
@@ -314,13 +261,11 @@ void SV_DirectConnect( netadr_t from ) {
 				// reset the address otherwise their ping will keep increasing
 				// with each connect message and they'd eventually be able to connect
 				svs.challenges[i].adr.port = 0;
-				Z_Free(pTemp);
 				return;
 			}
 			if ( sv_maxPing->value && ping > sv_maxPing->value ) {
 				NET_OutOfBandPrint( NS_SERVER, from, va("print\n%s\n", SE_GetString("MP_SVGAME", "SERVER_FOR_LOW_PING")));//Server is for low pings only\n" );
 				Com_DPrintf (SE_GetString("MP_SVGAME", "CLIENT_REJECTED_HIGH_PING"), i);//"Client %i rejected on a too high ping\n", i);
-				Z_Free(pTemp);
 				return;
 			}
 		}
@@ -342,7 +287,9 @@ void SV_DirectConnect( netadr_t from ) {
 			|| from.port == cl->netchan.remoteAddress.port ) ) {
 			Com_Printf ("%s:reconnect\n", NET_AdrToString (from));
 			newcl = cl;
+#ifdef _XBOX
 			reconnect = true;
+#endif
 			// VVFIXME - both SOF2 and Wolf remove this call, claiming it blows away the user's info
 			// disconnect the client from the game first so any flags the
 			// player might have are dropped
@@ -353,27 +300,24 @@ void SV_DirectConnect( netadr_t from ) {
 	}
 
 	// find a client slot
+	// if "sv_privateClients" is set > 0, then that number
+	// of client slots will be reserved for connections that
+	// have "password" set to the value of "sv_privatePassword"
+	// Info requests will report the maxclients as if the private
+	// slots didn't exist, to prevent people from trying to connect
+	// to a full server.
+	// This is to allow us to reserve a couple slots here on our
+	// servers so we can play without having to kick people.
 
-	// We don't do passwords or anything - clients send an xbps 1 (xbox private slot)
-	// if they're allowed to take a private slot. Check for that here:
-	bool usePrivateSlot = (strcmp( Info_ValueForKey( userinfo, "xbps" ), "1" ) == 0);
-
-	// Rather than manually searching/making certain client slots be public/private,
-	// just check the counts in the MM system:
-	if( logged_on &&
-		!NET_IsLocalAddress(from) &&
-		!usePrivateSlot &&
-		!XBL_MM_PublicSlotAvailable() )
-	{
-		// This will normally only happen if several people try to join at once.
-		// Reject the connection!
-		NET_OutOfBandPrint( NS_SERVER, from, "xFull\n" );
-		Com_DPrintf ("Rejected a connection.\n");
-		Z_Free(pTemp);
-		return;
+	// check for privateClient password
+	password = Info_ValueForKey( userinfo, "password" );
+	if ( !strcmp( password, sv_privatePassword->string ) ) {
+		startIndex = 0;
+	} else {
+		// skip past the reserved slots
+		startIndex = sv_privateClients->integer;
 	}
 
-	startIndex = 0;
 	newcl = NULL;
 	for ( i = startIndex; i < sv_maxclients->integer ; i++ ) {
 		cl = &svs.clients[i];
@@ -384,31 +328,30 @@ void SV_DirectConnect( netadr_t from ) {
 	}
 
 	if ( !newcl ) {
-		// Madness. The original code checked for local addresses only - and then kicked
-		// a bot, but only if everyone on was a bot? Or something. Uh, let's just kick
-		// a bot.
-		cl = NULL;
-
-		// Find a bot
-		for ( i = startIndex; i < sv_maxclients->integer ; i++ ) {
-			if( svs.clients[i].netchan.remoteAddress.type == NA_BOT ) {
+		if ( NET_IsLocalAddress( from ) ) {
+			count = 0;
+			for ( i = startIndex; i < sv_maxclients->integer ; i++ ) {
 				cl = &svs.clients[i];
-				break;
+				if (cl->netchan.remoteAddress.type == NA_BOT) {
+					count++;
+				}
+			}
+			// if they're all bots
+			if (count >= sv_maxclients->integer - startIndex) {
+				SV_DropClient(&svs.clients[sv_maxclients->integer - 1], "only bots on server");
+				newcl = &svs.clients[sv_maxclients->integer - 1];
+			}
+			else {
+				Com_Error( ERR_FATAL, "server is full on local connect\n" );
+				return;
 			}
 		}
-
-		if( !cl ) {
-			// Didn't find any bots - server is full.
+		else {
 			const char *SV_GetStringEdString(char *refSection, char *refName);
-			NET_OutOfBandPrint( NS_SERVER, from, "xFull\n" );
+			NET_OutOfBandPrint( NS_SERVER, from, va("print\n%s\n", SV_GetStringEdString("MP_SVGAME","SERVER_IS_FULL")));
 			Com_DPrintf ("Rejected a connection.\n");
-			Z_Free(pTemp);
 			return;
 		}
-
-		// Found a bot. Remove it to make room
-		SV_DropClient( cl, "bot removal" );
-		newcl = cl;
 	}
 
 	// we got a newcl, so reset the reliableSequence and reliableAcknowledge
@@ -417,114 +360,6 @@ void SV_DirectConnect( netadr_t from ) {
 
 gotnewcl:	
 
-#ifdef _XBOX
-	// OK. We used to manually search for a spot in the xbOnlineInfo player list now.
-	// But we MUST keep svs.clients in sync with the player list, so that clients
-	// can keep their cgs.clientinfo in sync as well. So...
-	int index = newcl - svs.clients;
-
-	// Sanity check
-	assert( index >= 0 && index < MAX_ONLINE_PLAYERS );
-
-	// Avoid a nasty bug situation: if the client is not logged on, they didn't send
-	// an XUID. Don't let live clients on syslink servers or vice-versa. Localhost
-	// doesn't need this check.
-	const char *sxuid = Info_ValueForKey( userinfo, "xuid" );
-	if ( !NET_IsLocalAddress(from) && ((logged_on && !*sxuid) || (!logged_on && *sxuid)) )
-	{
-		// We may not be able to reply to them - we might not have their address registered
-		NET_OutOfBandPrint( NS_SERVER, from, "print\nLive/SystemLink mismatch\n" );
-		Z_Free(pTemp);
-		return;
-	}
-
-	if ( reconnect )
-	{
-		// This is a reconnect message. They're going into the same slot as before.
-
-		// We don't need to grab much off the net here. Everything should still be valid.
-		// In particular, keep the old refIndex. If they sent an XUID, we'll update that,
-		// but if not we want to continue using their fake one from earlier.
-		if (logged_on)
-		{
-			StringToXUID(&xbOnlineInfo.xbPlayerList[index].xuid, sxuid);
-		}
-
-		// Ensure the client is active
-		xbOnlineInfo.xbPlayerList[index].isActive = true;
-	}
-	else
-	{
-		// OK. New client. First, sanity check that player and client lists are in sync:
-		assert( !xbOnlineInfo.xbPlayerList[index].isActive );
-
-		// Again, we don't have a full PlayerInfo like SOF2, but this is fine
-		XBPlayerInfo *pPlayer = &xbOnlineInfo.xbPlayerList[index];
-
-		// Zero it out to start with
-		memset(pPlayer, 0, sizeof(XBPlayerInfo));
-
-		// Copy XNADDR
-		StringToXnAddr(&pPlayer->xbAddr, Info_ValueForKey( userinfo, "xnaddr" ));
-
-		// Copy XUID
-		if(logged_on)
-		{
-			StringToXUID(&pPlayer->xuid, sxuid);
-		}
-		else
-		{
-			// Users have no XUID if not logged on. We make one up.
-			pPlayer->xuid.qwUserID = svs.clientRefNum;
-		}
-
-		// Set their name
-		strcpy(pPlayer->name, Info_ValueForKey( userinfo, "name" ));
-
-		pPlayer->refIndex = svs.clientRefNum++;
-		pPlayer->isActive = true;
-	}
-
-	// For dedicated servers (in particular) we want our stored (converted)
-	// inAddr to be correct - so we have to do it here, rather than in cl_parse
-	XNetXnAddrToInAddr( &xbOnlineInfo.xbPlayerList[index].xbAddr, Net_GetXNKID(),
-						&xbOnlineInfo.xbPlayerList[index].inAddr );
-
-	// Set our refIndex for later. We also remember if they were a private slot
-	// candidate when they joined, so we can free up the right type of slot when
-	// they leave later.
-	temp.refIndex = xbOnlineInfo.xbPlayerList[index].refIndex;
-	temp.usePrivateSlot = usePrivateSlot;
-
-	// Remove any mute flags as they are local to the client.
-	xbOnlineInfo.xbPlayerList[index].flags &= ~MUTED_PLAYER;
-	xbOnlineInfo.xbPlayerList[index].flags &= ~REMOTE_MUTED;
-
-	// Disable new player's voice until they send their VOICESTATE
-	xbOnlineInfo.xbPlayerList[index].flags &= ~VOICE_CAN_RECV;
-	xbOnlineInfo.xbPlayerList[index].flags &= ~VOICE_CAN_SEND;
-
-	// Friendship status is also local to the client
-	xbOnlineInfo.xbPlayerList[index].friendshipStatus = FRIEND_NO;
-
-	// Now send the new client's info to all other relevant clients
-	for (int j = 0; j < sv_maxclients->integer; j++) {
-		if ( svs.clients[j].state < CS_PRIMED ) {
-			continue;
-		}
-		if (svs.clients[j].netchan.remoteAddress.type == NA_BOT) {
-			continue;
-		}
-		SV_SendClientNewPeer( &svs.clients[j], &xbOnlineInfo.xbPlayerList[index] );
-	}
-
-	// If we're a dedicated server, then we won't process this in cl_parse, so do it all here:
-	if( com_dedicated->integer )
-	{
-		XBL_PL_CheckHistoryList(&xbOnlineInfo.xbPlayerList[index]);
-	}
-#endif
-
 	// build a new connection
 	// accept the new client
 	// this is the only place a client_t is ever initialized
@@ -532,11 +367,6 @@ gotnewcl:
 	clientNum = newcl - svs.clients;
 	ent = SV_GentityNum( clientNum );
 	newcl->gentity = ent;
-
-	//Clear this to prevent bug where a player joins and takes a client
-	//slot which left while in a vehicle, making the new player invisible.
-	ent->s.owner = 0;
-	ent->r.svFlags = 0;
 
 	// save the challenge
 	newcl->challenge = challenge;
@@ -555,18 +385,10 @@ gotnewcl:
 
 		NET_OutOfBandPrint( NS_SERVER, from, "print\n%s\n", denied );
 		Com_DPrintf ("Game rejected a connection: %s.\n", denied);
-		Z_Free(pTemp);
 		return;
 	}
 
 	SV_UserinfoChanged( newcl );
-
-	// update the advertised session
-    //
-#ifdef _XBOX
-	if (!reconnect)
-	    XBL_MM_AddPlayer( usePrivateSlot );
-#endif
 
 	// send the connect packet to the client
 	NET_OutOfBandPrint( NS_SERVER, from, "connectResponse" );
@@ -597,7 +419,6 @@ gotnewcl:
 	if ( count == 1 || count == sv_maxclients->integer ) {
 		SV_Heartbeat_f();
 	}
-	Z_Free(pTemp);
 }
 
 
@@ -630,43 +451,19 @@ void SV_DropClient( client_t *drop, const char *reason ) {
 		}
 	}
 
-#ifdef _XBOX
-	// Tells all clients (except the dropee) to remove the dropped player from their list, if not a bot
-	if ( drop->netchan.remoteAddress.type != NA_BOT )
-	{
-		int index = drop - svs.clients;
-		for (int j = 0; j < sv_maxclients->integer ; j++) {
-			if ( svs.clients[j].state < CS_PRIMED ) {
-				continue;
-			}
-			if ( svs.clients[j].netchan.remoteAddress.type == NA_BOT ) {
-				continue;
-			}
-			if ( index == j ) {
-				continue;
-			}
-			SV_SendClientRemovePeer(&svs.clients[j], index);
-		}
+	// Kill any download
+	SV_CloseDownload( drop );
 
-		// update the advertised session
-		XBL_MM_RemovePlayer( drop->usePrivateSlot );
-
-		// If we're a dedicated server, then we won't process this in cl_parse, so do everything here:
-		if( com_dedicated->integer )
-		{
-			xbOnlineInfo.xbPlayerList[index].isActive = false;
-			g_Voice.OnPlayerDisconnect( &xbOnlineInfo.xbPlayerList[index] );
-			XBL_PL_RemoveActivePeer(&xbOnlineInfo.xbPlayerList[index].xuid, index);
-		}
-	}
-#endif
-
-	// tell everyone why they got dropped	- BTO: this is totally unnecessary,
-	// and makes gramatically correct drop messages harder.
-	//SV_SendServerCommand( NULL, "print \"%s" S_COLOR_WHITE " %s\n\"", drop->name, reason );
+	// tell everyone why they got dropped
+	SV_SendServerCommand( NULL, "print \"%s" S_COLOR_WHITE " %s\n\"", drop->name, reason );
 
 	Com_DPrintf( "Going to CS_ZOMBIE for %s\n", drop->name );
 	drop->state = CS_ZOMBIE;		// become free in a few seconds
+
+	if (drop->download)	{
+		FS_FCloseFile( drop->download );
+		drop->download = 0;
+	}
 
 	// call the prog function for removing a client
 	// this will remove the body, among other things
@@ -681,9 +478,21 @@ void SV_DropClient( client_t *drop, const char *reason ) {
 
 	// nuke user info
 	SV_SetUserinfo( drop - svs.clients, "" );
+
+	// if this was the last client on the server, send a heartbeat
+	// to the master so it is known the server is empty
+	// send a heartbeat now so the master will get up to date info
+	// if there is already a slot for this ip, reuse it
+	for (i=0 ; i < sv_maxclients->integer ; i++ ) {
+		if ( svs.clients[i].state >= CS_CONNECTED ) {
+			break;
+		}
+	}
+	if ( i == sv_maxclients->integer ) {
+		SV_Heartbeat_f();
+	}
 }
 
-/*
 void SV_WriteRMGAutomapSymbols ( msg_t* msg )
 {
 	int count = TheRandomMissionManager->GetAutomapSymbolCount ( );
@@ -701,7 +510,6 @@ void SV_WriteRMGAutomapSymbols ( msg_t* msg )
 		MSG_WriteLong ( msg, (long)symbol->mOrigin[1] );
 	}
 }
-*/
 
 /*
 ================
@@ -724,25 +532,17 @@ void SV_SendClientGameState( client_t *client ) {
 	// packet fragmentation of initial snapshot.
 	while(client->state&&client->netchan.unsentFragments)
 	{
-#ifdef _XBOX
-		if(ClientManager::splitScreenMode == qtrue)
-		{
-			client->netchan.unsentFragments = qfalse;
-			break;
-		}
-#endif
 		// send additional message fragments if the last message
 		// was too large to send at once
 	
-#ifndef FINAL_BUILD
 		Com_Printf ("[ISM]SV_SendClientGameState() [2] for %s, writing out old fragments\n", client->name);
-#endif
 		SV_Netchan_TransmitNextFragment(&client->netchan);
 	}
 
 	Com_DPrintf ("SV_SendClientGameState() for %s\n", client->name);
 	Com_DPrintf( "Going from CS_CONNECTED to CS_PRIMED for %s\n", client->name );
-	client->state = CS_PRIMED;
+	if ( client->state == CS_CONNECTED )
+		client->state = CS_PRIMED;
 	client->pureAuthentic = 0;
 
 	// when we receive the first packet from the client, we will
@@ -794,7 +594,6 @@ void SV_SendClientGameState( client_t *client ) {
 	MSG_WriteLong( &msg, sv.checksumFeed);
 
 	//rwwRMG - send info for the terrain
-/*
 	if ( TheRandomMissionManager )
 	{
 		z_stream zdata;
@@ -841,7 +640,6 @@ void SV_SendClientGameState( client_t *client ) {
 	{
 		MSG_WriteShort ( &msg, 0 );
 	}
-*/
 
 	// deliver this to the client
 	SV_SendMessageToClient( &msg, client );
@@ -872,100 +670,6 @@ void SV_SendClientMapChange( client_t *client )
 	SV_SendMessageToClient( &msg, client );
 }
 
-#ifdef _XBOX	// Utilities to notify clients of various XBL state changes
-/*
-	SV_SendClientNewPeer - tell a client to add a player to his xbOnlineInfo.xbPlayerList
-*/
-void SV_SendClientNewPeer(client_t *client, XBPlayerInfo* info) 
-{
-	msg_t		msg;
-	byte		msgBuffer[MAX_MSGLEN];
-
-	MSG_Init( &msg, msgBuffer, sizeof( msgBuffer ) );
-
-	// NOTE, MRE: all server->client messages now acknowledge
-	// let the client know which reliable clientCommands we have received
-	MSG_WriteLong( &msg, client->lastClientCommand );
-
-	// send any server commands waiting to be sent first.
-	// we have to do this cause we send the client->reliableSequence
-	// with a gamestate and it sets the clc.serverCommandSequence at
-	// the client side
-	SV_UpdateServerCommandsToClient( client, &msg );
-
-	// send the command
-	MSG_WriteByte( &msg, svc_newpeer );
-
-	// We now write the specific player number as well, so the clients know where
-	// to put this info. (That keeps cgs.clientinfo in sync with xbPlayerList)
-	MSG_WriteLong( &msg, info - xbOnlineInfo.xbPlayerList );
-	MSG_WriteData(&msg, info, sizeof(XBPlayerInfo));
-
-	// deliver this to the client
-	SV_SendMessageToClient( &msg, client );
-}
-
-/*
-	SV_SendClientRemovePeer - tell a client to remove a player from his xbOnlineInfo.xbPlayerList
-*/
-void SV_SendClientRemovePeer(client_t *client, int index) 
-{
-	msg_t		msg;
-	byte		msgBuffer[MAX_MSGLEN];
-
-	MSG_Init( &msg, msgBuffer, sizeof( msgBuffer ) );
-
-	// NOTE, MRE: all server->client messages now acknowledge
-	// let the client know which reliable clientCommands we have received
-	MSG_WriteLong( &msg, client->lastClientCommand );
-
-	// send any server commands waiting to be sent first.
-	// we have to do this cause we send the client->reliableSequence
-	// with a gamestate and it sets the clc.serverCommandSequence at
-	// the client side
-	SV_UpdateServerCommandsToClient( client, &msg );
-
-	// send the command
-	MSG_WriteByte( &msg, svc_removepeer );
-
-	// All clients have IDENTICAL ordering within xbPlayerList, so just
-	// send the index (rather than the XUID, like we did before).
-	MSG_WriteLong( &msg, index );
-
-	// deliver this to the client
-	SV_SendMessageToClient( &msg, client );
-}
-
-/*
-	SV_SendClientXbInfo - Sends the server's xbOnlineInfo to a given client
-*/
-void SV_SendClientXbInfo(client_t *client) 
-{
-	msg_t		msg;
-	byte		msgBuffer[MAX_MSGLEN];
-
-	MSG_Init( &msg, msgBuffer, sizeof( msgBuffer ) );
-
-	// NOTE, MRE: all server->client messages now acknowledge
-	// let the client know which reliable clientCommands we have received
-	MSG_WriteLong( &msg, client->lastClientCommand );
-
-	// send any server commands waiting to be sent first.
-	// we have to do this cause we send the client->reliableSequence
-	// with a gamestate and it sets the clc.serverCommandSequence at
-	// the client side
-	SV_UpdateServerCommandsToClient( client, &msg );
-
-	// send the command
-	MSG_WriteByte( &msg, svc_xbInfo );
-
-	MSG_WriteData(&msg, &(xbOnlineInfo), sizeof(XBOnlineInfo));
-
-	// deliver this to the client
-	SV_SendMessageToClient( &msg, client );
-}
-#endif	// _XBOX
-
 /*
 ==================
 SV_ClientEnterWorld
@@ -977,11 +681,6 @@ void SV_ClientEnterWorld( client_t *client, usercmd_t *cmd ) {
 
 	Com_DPrintf( "Going from CS_PRIMED to CS_ACTIVE for %s\n", client->name );
 	client->state = CS_ACTIVE;
-
-#ifdef _XBOX
-	//update XbOnlineInfo with client
-	SV_SendClientXbInfo(client);
-#endif
 
 	// set up the entity for the client
 	clientNum = client - svs.clients;
@@ -1015,7 +714,6 @@ SV_CloseDownload
 clear/free any download vars
 ==================
 */
-#ifndef _XBOX	// No downloads on Xbox
 static void SV_CloseDownload( client_t *cl ) {
 	int i;
 
@@ -1044,6 +742,9 @@ Abort a download if in progress
 ==================
 */
 void SV_StopDownload_f( client_t *cl ) {
+	if ( cl->state == CS_ACTIVE )
+		return;
+
 	if (*cl->downloadName)
 		Com_DPrintf( "clientDownload: %d : file \"%s\" aborted\n", cl - svs.clients, cl->downloadName );
 
@@ -1058,6 +759,9 @@ Downloads are finished
 ==================
 */
 void SV_DoneDownload_f( client_t *cl ) {
+	if ( cl->state == CS_ACTIVE )
+		return;
+
 	Com_DPrintf( "clientDownload: %s Done\n", cl->name);
 	// resend the game state to update any clients that entered during the download
 	SV_SendClientGameState(cl);
@@ -1074,6 +778,9 @@ the same as cl->downloadClientBlock
 void SV_NextDownload_f( client_t *cl )
 {
 	int block = atoi( Cmd_Argv(1) );
+
+	if ( cl->state == CS_ACTIVE )
+		return;
 
 	if (block == cl->downloadClientBlock) {
 		Com_DPrintf( "clientDownload: %d : client acknowledge of block %d\n", cl - svs.clients, block );
@@ -1101,6 +808,8 @@ SV_BeginDownload_f
 ==================
 */
 void SV_BeginDownload_f( client_t *cl ) {
+	if ( cl->state == CS_ACTIVE )
+		return;
 
 	// Kill any existing download
 	SV_CloseDownload( cl );
@@ -1118,50 +827,100 @@ Check to see if the client wants a file, open it if needed and start pumping the
 Fill up msg with data 
 ==================
 */
-void SV_WriteDownloadToClient( client_t *cl , msg_t *msg )
+void SV_WriteDownloadToClient(client_t *cl, msg_t *msg)
 {
 	int curindex;
 	int rate;
 	int blockspersnap;
-	int idPack, missionPack;
+	int unreferenced = 1;
 	char errorMessage[1024];
+	char pakbuf[MAX_QPATH], *pakptr;
+	int numRefPaks;
 
 	if (!*cl->downloadName)
 		return;	// Nothing being downloaded
 
-	if (!cl->download) {
+	if(!cl->download)
+	{
+		qboolean idPack = qfalse;
+		qboolean missionPack = qfalse;
+	
+ 		// Chop off filename extension.
+		Com_sprintf(pakbuf, sizeof(pakbuf), "%s", cl->downloadName);
+		pakptr = strrchr(pakbuf, '.');
+		
+		if(pakptr)
+		{
+			*pakptr = '\0';
+
+			// Check for pk3 filename extension
+			if(!Q_stricmp(pakptr + 1, "pk3"))
+			{
+				const char *referencedPaks = FS_ReferencedPakNames();
+
+				// Check whether the file appears in the list of referenced
+				// paks to prevent downloading of arbitrary files.
+				Cmd_TokenizeStringIgnoreQuotes(referencedPaks);
+				numRefPaks = Cmd_Argc();
+
+				for(curindex = 0; curindex < numRefPaks; curindex++)
+				{
+					if(!FS_FilenameCompare(Cmd_Argv(curindex), pakbuf))
+					{
+						unreferenced = 0;
+
+						// now that we know the file is referenced,
+						// check whether it's legal to download it.
+						missionPack = FS_idPak(pakbuf, "missionpack");
+						idPack = missionPack;
+						idPack = (qboolean)(idPack || FS_idPak(pakbuf, "base"));
+
+						break;
+					}
+				}
+			}
+		}
+
+		cl->download = 0;
+
 		// We open the file here
-
-		Com_Printf( "clientDownload: %d : begining \"%s\"\n", cl - svs.clients, cl->downloadName );
-
-		missionPack = FS_idPak(cl->downloadName, "missionpack");
-		idPack = missionPack || FS_idPak(cl->downloadName, "base");
-
-		if ( !sv_allowDownload->integer || idPack ||
-			( cl->downloadSize = FS_SV_FOpenFileRead( cl->downloadName, &cl->download ) ) <= 0 ) {
+		if ( !sv_allowDownload->integer ||
+			idPack || unreferenced ||
+			( cl->downloadSize = FS_SV_FOpenFileRead( cl->downloadName, &cl->download ) ) < 0 ) {
 			// cannot auto-download file
-			if (idPack) {
-				Com_Printf("clientDownload: %d : \"%s\" cannot download id pk3 files\n", cl - svs.clients, cl->downloadName);
-				if (missionPack) {
+			if(unreferenced)
+			{
+				Com_Printf("clientDownload: %d : \"%s\" is not referenced and cannot be downloaded.\n", (int) (cl - svs.clients), cl->downloadName);
+				Com_sprintf(errorMessage, sizeof(errorMessage), "File \"%s\" is not referenced and cannot be downloaded.", cl->downloadName);
+			}
+			else if (idPack) {
+				Com_Printf("clientDownload: %d : \"%s\" cannot download id pk3 files\n", (int) (cl - svs.clients), cl->downloadName);
+				if(missionPack)
+				{
 					Com_sprintf(errorMessage, sizeof(errorMessage), "Cannot autodownload Team Arena file \"%s\"\n"
 									"The Team Arena mission pack can be found in your local game store.", cl->downloadName);
 				}
-				else {
+				else
+				{
 					Com_sprintf(errorMessage, sizeof(errorMessage), "Cannot autodownload id pk3 file \"%s\"", cl->downloadName);
 				}
-			} else if ( !sv_allowDownload->integer ) {
-				Com_Printf("clientDownload: %d : \"%s\" download disabled", cl - svs.clients, cl->downloadName);
+			}
+			else if ( !sv_allowDownload->integer ) {
+				Com_Printf("clientDownload: %d : \"%s\" download disabled\n", (int) (cl - svs.clients), cl->downloadName);
 				if (sv_pure->integer) {
 					Com_sprintf(errorMessage, sizeof(errorMessage), "Could not download \"%s\" because autodownloading is disabled on the server.\n\n"
 										"You will need to get this file elsewhere before you "
 										"can connect to this pure server.\n", cl->downloadName);
 				} else {
 					Com_sprintf(errorMessage, sizeof(errorMessage), "Could not download \"%s\" because autodownloading is disabled on the server.\n\n"
-										"Set autodownload to No in your settings and you might be "
-										"able to connect if you do have the file.\n", cl->downloadName);
+                    "The server you are connecting to is not a pure server, "
+                    "set autodownload to No in your settings and you might be "
+                    "able to join the game anyway.\n", cl->downloadName);
 				}
 			} else {
-				Com_Printf("clientDownload: %d : \"%s\" file not found on server\n", cl - svs.clients, cl->downloadName);
+        // NOTE TTimo this is NOT supposed to happen unless bug in our filesystem scheme?
+        //   if the pk3 is referenced, it must have been found somewhere in the filesystem
+				Com_Printf("clientDownload: %d : \"%s\" file not found on server\n", (int) (cl - svs.clients), cl->downloadName);
 				Com_sprintf(errorMessage, sizeof(errorMessage), "File \"%s\" not found on server for autodownloading.\n", cl->downloadName);
 			}
 			MSG_WriteByte( msg, svc_download );
@@ -1170,9 +929,15 @@ void SV_WriteDownloadToClient( client_t *cl , msg_t *msg )
 			MSG_WriteString( msg, errorMessage );
 
 			*cl->downloadName = 0;
+			
+			if(cl->download)
+				FS_FCloseFile(cl->download);
+			
 			return;
 		}
  
+		Com_Printf( "clientDownload: %d : beginning \"%s\"\n", (int) (cl - svs.clients), cl->downloadName );
+		
 		// Init
 		cl->downloadCurrentBlock = cl->downloadClientBlock = cl->downloadXmitBlock = 0;
 		cl->downloadCount = 0;
@@ -1283,7 +1048,6 @@ void SV_WriteDownloadToClient( client_t *cl , msg_t *msg )
 		cl->downloadSendTime = svs.time;
 	}
 }
-#endif	// Xbox	- No downloads on Xbox
 
 /*
 =================
@@ -1295,8 +1059,7 @@ The client is going to disconnect, so remove the connection immediately  FIXME: 
 const char *SV_GetStringEdString(char *refSection, char *refName);
 static void SV_Disconnect_f( client_t *cl ) {
 //	SV_DropClient( cl, "disconnected" );
-//	SV_DropClient( cl, SV_GetStringEdString("MP_SVGAME","DISCONNECTED") );
-	SV_DropClient( cl, "@MENUS_LOST_CONNECTION" );
+	SV_DropClient( cl, SV_GetStringEdString("MP_SVGAME","DISCONNECTED") );
 }
 
 /*
@@ -1313,7 +1076,6 @@ This routine would be a bit simpler with a goto but i abstained
 =================
 */
 static void SV_VerifyPaks_f( client_t *cl ) {
-#ifndef _XBOX
 	int nChkSum1, nChkSum2, nClientPaks, nServerPaks, i, j, nCurArg;
 	int nClientChkSum[1024];
 	int nServerChkSum[1024];
@@ -1461,7 +1223,6 @@ static void SV_VerifyPaks_f( client_t *cl ) {
 			SV_DropClient( cl, "Unpure client detected. Invalid .PK3 files referenced!" );
 		}
 	}
-#endif
 }
 
 /*
@@ -1483,19 +1244,15 @@ into a more C friendly form.
 */
 void SV_UserinfoChanged( client_t *cl ) {
 	char	*val;
+	char	*ip;
 	int		i;
+	int		len;
 
 	// name for C code
 	Q_strncpyz( cl->name, Info_ValueForKey (cl->userinfo, "name"), sizeof(cl->name) );
 
 	// rate command
 
-	// If we're playing system link, everyone is on a LAN, so no one gets choked:
-	if( logged_on )
-		cl->rate = 8000;
-	else
-		cl->rate = 99999;
-/*
 	// if the client is on the same subnet as the server and we aren't running an
 	// internet public server, assume they don't need a rate choke
 	if ( Sys_IsLANAddress( cl->netchan.remoteAddress ) && com_dedicated->integer != 2 ) {
@@ -1514,7 +1271,6 @@ void SV_UserinfoChanged( client_t *cl ) {
 			cl->rate = 3000;
 		}
 	}
-*/
 	val = Info_ValueForKey (cl->userinfo, "handicap");
 	if (strlen(val)) {
 		i = atoi(val);
@@ -1536,6 +1292,25 @@ void SV_UserinfoChanged( client_t *cl ) {
 	} else {
 		cl->snapshotMsec = 50;
 	}
+
+	// TTimo
+	// maintain the IP information
+	// the banning code relies on this being consistently present
+	if( NET_IsLocalAddress(cl->netchan.remoteAddress) )
+		ip = "localhost";
+	else
+		ip = (char*)NET_AdrToString( cl->netchan.remoteAddress );
+
+	val = Info_ValueForKey( cl->userinfo, "ip" );
+	if( val[0] )
+		len = strlen( ip ) - strlen( val ) + strlen( cl->userinfo );
+	else
+		len = strlen( ip ) + 4 + strlen( cl->userinfo );
+
+	if( len >= MAX_INFO_STRING )
+		SV_DropClient( cl, "userinfo string length exceeded" );
+	else
+		Info_SetValueForKey( cl->userinfo, "ip", ip );
 }
 
 #define INFO_CHANGE_MIN_INTERVAL	6000 //6 seconds is reasonable I suppose
@@ -1583,12 +1358,10 @@ static ucmd_t ucmds[] = {
 	{"disconnect", SV_Disconnect_f},
 	{"cp", SV_VerifyPaks_f},
 	{"vdr", SV_ResetPureClient_f},
-#ifndef _XBOX	// No downloads on Xbox
 	{"download", SV_BeginDownload_f},
 	{"nextdl", SV_NextDownload_f},
 	{"stopdl", SV_StopDownload_f},
 	{"donedl", SV_DoneDownload_f},
-#endif
 
 	{NULL, NULL}
 };
@@ -1602,6 +1375,7 @@ Also called by bot code
 */
 void SV_ExecuteClientCommand( client_t *cl, const char *s, qboolean clientOK ) {
 	ucmd_t	*u;
+	qboolean bProcessed = qfalse;
 	
 	Cmd_TokenizeString( s );
 
@@ -1609,16 +1383,20 @@ void SV_ExecuteClientCommand( client_t *cl, const char *s, qboolean clientOK ) {
 	for (u=ucmds ; u->name ; u++) {
 		if (!strcmp (Cmd_Argv(0), u->name) ) {
 			u->func( cl );
+			bProcessed = qtrue;
 			break;
 		}
 	}
 
 	if (clientOK) {
 		// pass unknown strings to the game
-		if (!u->name && sv.state == SS_GAME) {
+		if (!u->name && sv.state == SS_GAME && (cl->state == CS_ACTIVE || cl->state == CS_PRIMED)) {
+			Cmd_Args_Sanitize();
 			VM_Call( gvm, GAME_CLIENT_COMMAND, cl - svs.clients );
 		}
 	}
+	else if (!bProcessed)
+		Com_DPrintf( "client text ignored for %s: %s\n", cl->name, Cmd_Argv(0) );
 }
 
 /*
@@ -1645,8 +1423,7 @@ static qboolean SV_ClientCommand( client_t *cl, msg_t *msg ) {
 	if ( seq > cl->lastClientCommand + 1 ) {
 		Com_Printf( "Client %s lost %i clientCommands\n", cl->name, 
 			seq - cl->lastClientCommand + 1 );
-//		SV_DropClient( cl, "Lost reliable commands" );
-		SV_DropClient( cl, "@MENUS_LOST_CONNECTION" );
+		SV_DropClient( cl, "Lost reliable commands" );
 		return qfalse;
 	}
 
@@ -1657,17 +1434,14 @@ static qboolean SV_ClientCommand( client_t *cl, msg_t *msg ) {
 	// but not other people
 	// We don't do this when the client hasn't been active yet since its
 	// normal to spam a lot of commands when downloading
-/*
 	if ( !com_cl_running->integer && 
 		cl->state >= CS_ACTIVE &&
 		sv_floodProtect->integer && 
 		svs.time < cl->nextReliableTime ) {
 		// ignore any other text messages from this client but let them keep playing
+		// TTimo - moved the ignored verbose to the actual processing in SV_ExecuteClientCommand, only printing if the core doesn't intercept
 		clientOk = qfalse;
-		Com_DPrintf( "client text ignored for %s\n", cl->name );
-		//return qfalse;	// stop processing
 	} 
-*/
 
 	// don't allow another command for one second
 	cl->nextReliableTime = svs.time + 1000;
@@ -1763,12 +1537,10 @@ static void SV_UserMove( client_t *cl, msg_t *msg, qboolean delta ) {
 		// the moves can be processed normaly
 	}
 	//
-#ifndef _XBOX	// No pure on Xbox
 	if (sv_pure->integer != 0 && cl->pureAuthentic == 0) {
 		SV_DropClient( cl, "Cannot validate pure client!");
 		return;
 	}
-#endif
 
 	if ( cl->state != CS_ACTIVE ) {
 		cl->deltaMessage = -1;
@@ -1847,11 +1619,7 @@ void SV_ExecuteClientMessage( client_t *cl, msg_t *msg ) {
 	// gamestate it was at.  This allows it to keep downloading even when
 	// the gamestate changes.  After the download is finished, we'll
 	// notice and send it a new game state
-#ifdef _XBOX	// No downloads on Xbox
-	if ( serverId != sv.serverId ) {
-#else
 	if ( serverId != sv.serverId && !*cl->downloadName ) {
-#endif
 		if ( serverId == sv.restartedServerId ) {
 			// they just haven't caught the map_restart yet
 			return;

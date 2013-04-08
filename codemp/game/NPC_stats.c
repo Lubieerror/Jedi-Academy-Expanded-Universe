@@ -2,19 +2,12 @@
 #include "b_local.h"
 #include "b_public.h"
 #include "anims.h"
-#include "../ghoul2/G2.h"
-
-#ifdef _XBOX
-#include "../cgame/cg_local.h"
-#include "../renderer/modelmem.h"
-#endif
+#include "ghoul2/G2.h"
 
 extern qboolean NPCsPrecached;
 
-#include "../namespace_begin.h"
 extern qboolean WP_SaberParseParms( const char *SaberName, saberInfo_t *saber );
 extern void WP_RemoveSaber( saberInfo_t *sabers, int saberNum );
-#include "../namespace_end.h"
 
 stringID_table_t TeamTable[] =
 {
@@ -22,7 +15,7 @@ stringID_table_t TeamTable[] =
 	ENUM2STRING(NPCTEAM_PLAYER),
 	ENUM2STRING(NPCTEAM_ENEMY),
 	ENUM2STRING(NPCTEAM_NEUTRAL),	// most droids are team_neutral, there are some exceptions like Probe,Seeker,Interrogator
-	"",	-1
+	{"",	-1}
 };
 
 // this list was made using the model directories, this MUST be in the same order as the CLASS_ enum in teams.h
@@ -87,7 +80,7 @@ stringID_table_t ClassTable[] =
 	ENUM2STRING(CLASS_VEHICLE),
 	ENUM2STRING(CLASS_RANCOR),
 	ENUM2STRING(CLASS_WAMPA),
-	"",	-1
+	{"",	-1}
 };
 
 stringID_table_t BSTable[] =
@@ -103,10 +96,10 @@ stringID_table_t BSTable[] =
 	ENUM2STRING(BS_REMOVE),//# Waits for player to leave PVS then removes itself
 	ENUM2STRING(BS_CINEMATIC),//# Does nothing but face it's angles and move to a goal if it has one
 	//the rest are internal only
-	"",				-1,
+	{"",				-1},
 };
 
-#define stringIDExpand(str, strEnum)	str, strEnum, ENUM2STRING(strEnum)
+#define stringIDExpand(str, strEnum)	{str, strEnum}, ENUM2STRING(strEnum)
 
 stringID_table_t BSETTable[] =
 {
@@ -127,13 +120,11 @@ stringID_table_t BSETTable[] =
 	ENUM2STRING(BSET_FFIRE),//# script to run when player shoots their own teammates
 	ENUM2STRING(BSET_FFDEATH),//# script to run when player kills a teammate
 	stringIDExpand("", BSET_INVALID),
-	"",				-1,
+	{"",				-1},
 };
 
-#include "../namespace_begin.h"
 extern stringID_table_t WPTable[];
 extern stringID_table_t FPTable[];
-#include "../namespace_end.h"
 
 char	*TeamNames[TEAM_NUM_TEAMS] = 
 {
@@ -231,9 +222,7 @@ int NPC_ReactionTime ( void )
 // parse support routines
 //
 
-#include "../namespace_begin.h"
 extern qboolean BG_ParseLiteral( const char **data, const char *string );
-#include "../namespace_end.h"
 
 //
 // NPC parameters file : scripts/NPCs.cfg
@@ -332,11 +321,10 @@ static rank_t TranslateRankName( const char *name )
 	}
 
 	return RANK_CIVILIAN;
+
 }
 
-#include "../namespace_begin.h"
 extern saber_colors_t TranslateSaberColor( const char *name );
-#include "../namespace_end.h"
 
 /* static int MethodNameToNumber( const char *name ) {
 	if ( !Q_stricmp( name, "EXPONENTIAL" ) ) {
@@ -756,8 +744,7 @@ void NPC_Precache ( gentity_t *spawner )
 			if ( COM_ParseString( &p, &value ) ) {
 				continue;
 			}
-			//if ( !(spawner->svFlags&SVF_NO_BASIC_SOUNDS) )
-			if (1)
+			if ( !(spawner->r.svFlags&SVF_NO_BASIC_SOUNDS) )
 			{
 				//FIXME: store this in some sound field or parse in the soundTable like the animTable...
 				Q_strncpyz( sound, value, sizeof( sound ) );
@@ -776,8 +763,7 @@ void NPC_Precache ( gentity_t *spawner )
 			if ( COM_ParseString( &p, &value ) ) {
 				continue;
 			}
-			//if ( !(spawner->svFlags&SVF_NO_COMBAT_SOUNDS) )
-			if (1)
+			if ( !(spawner->r.svFlags&SVF_NO_COMBAT_SOUNDS) )
 			{
 				//FIXME: store this in some sound field or parse in the soundTable like the animTable...
 				Q_strncpyz( sound, value, sizeof( sound ) );
@@ -796,8 +782,7 @@ void NPC_Precache ( gentity_t *spawner )
 			if ( COM_ParseString( &p, &value ) ) {
 				continue;
 			}
-			//if ( !(spawner->svFlags&SVF_NO_EXTRA_SOUNDS) )
-			if (1)
+			if ( !(spawner->r.svFlags&SVF_NO_EXTRA_SOUNDS) )
 			{
 				//FIXME: store this in some sound field or parse in the soundTable like the animTable...
 				Q_strncpyz( sound, value, sizeof( sound ) );
@@ -816,8 +801,7 @@ void NPC_Precache ( gentity_t *spawner )
 			if ( COM_ParseString( &p, &value ) ) {
 				continue;
 			}
-			//if ( !(spawner->svFlags&SVF_NO_EXTRA_SOUNDS) )
-			if (1)
+			if ( !(spawner->r.svFlags&SVF_NO_EXTRA_SOUNDS) )
 			{
 				//FIXME: store this in some sound field or parse in the soundTable like the animTable...
 				Q_strncpyz( sound, value, sizeof( sound ) );
@@ -842,7 +826,7 @@ void NPC_Precache ( gentity_t *spawner )
 
 			curWeap = GetIDForString( WPTable, value );
 
-			if (curWeap >= 0 && curWeap < WP_NUM_WEAPONS)
+			if (curWeap > WP_NONE && curWeap < WP_NUM_WEAPONS)
 			{
 				RegisterItem(BG_FindItemForWeapon((weapon_t)curWeap));
 			}
@@ -1324,9 +1308,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 				}
 				if ( n < 0 ) 
 				{
-#ifndef FINAL_BUILD
 					Com_Printf( S_COLOR_YELLOW"WARNING: bad %s in NPC '%s'\n", token, NPCName );
-#endif
 					continue;
 				}
 				ri->headYawRangeLeft = n;
@@ -1343,9 +1325,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 				}
 				if ( n < 0 ) 
 				{
-#ifndef FINAL_BUILD
 					Com_Printf( S_COLOR_YELLOW"WARNING: bad %s in NPC '%s'\n", token, NPCName );
-#endif
 					continue;
 				}
 				ri->headYawRangeRight = n;
@@ -1362,9 +1342,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 				}
 				if ( n < 0 ) 
 				{
-#ifndef FINAL_BUILD
 					Com_Printf( S_COLOR_YELLOW"WARNING: bad %s in NPC '%s'\n", token, NPCName );
-#endif
 					continue;
 				}
 				ri->headPitchRangeUp = n;
@@ -1381,9 +1359,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 				}
 				if ( n < 0 ) 
 				{
-#ifndef FINAL_BUILD
 					Com_Printf( S_COLOR_YELLOW"WARNING: bad %s in NPC '%s'\n", token, NPCName );
-#endif
 					continue;
 				}
 				ri->headPitchRangeDown = n;
@@ -1400,9 +1376,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 				}
 				if ( n < 0 ) 
 				{
-#ifndef FINAL_BUILD
 					Com_Printf( S_COLOR_YELLOW"WARNING: bad %s in NPC '%s'\n", token, NPCName );
-#endif
 					continue;
 				}
 				ri->torsoYawRangeLeft = n;
@@ -1419,9 +1393,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 				}
 				if ( n < 0 ) 
 				{
-#ifndef FINAL_BUILD
 					Com_Printf( S_COLOR_YELLOW"WARNING: bad %s in NPC '%s'\n", token, NPCName );
-#endif
 					continue;
 				}
 				ri->torsoYawRangeRight = n;
@@ -1438,9 +1410,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 				}
 				if ( n < 0 ) 
 				{
-#ifndef FINAL_BUILD
 					Com_Printf( S_COLOR_YELLOW"WARNING: bad %s in NPC '%s'\n", token, NPCName );
-#endif
 					continue;
 				}
 				ri->torsoPitchRangeUp = n;
@@ -1457,9 +1427,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 				}
 				if ( n < 0 ) 
 				{
-#ifndef FINAL_BUILD
 					Com_Printf( S_COLOR_YELLOW"WARNING: bad %s in NPC '%s'\n", token, NPCName );
-#endif
 					continue;
 				}
 				ri->torsoPitchRangeDown = n;
@@ -1484,9 +1452,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 					NPC->client->ps.iModelScale = n; //so the client knows
 					if (n >= 1024)
 					{
-#ifndef FINAL_BUILD
 						Com_Printf("WARNING: MP does not support scaling up to or over 1024%\n");
-#endif
 						n = 1023;
 					}
 
@@ -1623,9 +1589,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 					}
 					if ( n < 1 || n > 5 ) 
 					{
-#ifndef FINAL_BUILD
 						Com_Printf( S_COLOR_YELLOW"WARNING: bad %s in NPC '%s'\n", token, NPCName );
-#endif
 						continue;
 					}
 					if ( NPC->NPC )
@@ -1810,9 +1774,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 				}
 				if ( n < 0 ) 
 				{
-#ifndef FINAL_BUILD
 					Com_Printf( S_COLOR_YELLOW"WARNING: bad %s in NPC '%s'\n", token, NPCName );
-#endif
 					continue;
 				}
 				if ( NPC->NPC )
@@ -2091,9 +2053,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 					}
 					if ( n < 0 ) 
 					{
-#ifndef FINAL_BUILD
 						Com_Printf( S_COLOR_YELLOW"WARNING: bad %s in NPC '%s'\n", token, NPCName );
-#endif
 						continue;
 					}
 					if ( NPC->NPC )
@@ -2113,9 +2073,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 					}
 					if ( n < 0 ) 
 					{
-#ifndef FINAL_BUILD
 						Com_Printf( S_COLOR_YELLOW"WARNING: bad %s in NPC '%s'\n", token, NPCName );
-#endif
 						continue;
 					}
 					if ( NPC->NPC )
@@ -2135,9 +2093,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 					}
 					if ( n < 0 ) 
 					{
-#ifndef FINAL_BUILD
 						Com_Printf( S_COLOR_YELLOW"WARNING: bad %s in NPC '%s'\n", token, NPCName );
-#endif
 						continue;
 					}
 					if ( NPC->NPC )
@@ -2163,9 +2119,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 					}
 					if ( n < BS_DEFAULT || n >= NUM_BSTATES ) 
 					{
-#ifndef FINAL_BUILD
 						Com_Printf( S_COLOR_YELLOW"WARNING: bad %s in NPC '%s'\n", token, NPCName );
-#endif
 						continue;
 					}
 					if ( NPC->NPC )
@@ -2183,8 +2137,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 				{
 					continue;
 				}
-				//if ( !(NPC->svFlags&SVF_NO_BASIC_SOUNDS) )
-				if (1)
+				if ( !(NPC->r.svFlags&SVF_NO_BASIC_SOUNDS) )
 				{
 					//FIXME: store this in some sound field or parse in the soundTable like the animTable...
 					Q_strncpyz( sound, value, sizeof( sound ) );
@@ -2206,8 +2159,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 				{
 					continue;
 				}
-				//if ( !(NPC->svFlags&SVF_NO_COMBAT_SOUNDS) )
-				if (1)
+				if ( !(NPC->r.svFlags&SVF_NO_COMBAT_SOUNDS) )
 				{
 					//FIXME: store this in some sound field or parse in the soundTable like the animTable...
 					Q_strncpyz( sound, value, sizeof( sound ) );
@@ -2228,8 +2180,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 				{
 					continue;
 				}
-				//if ( !(NPC->svFlags&SVF_NO_EXTRA_SOUNDS) )
-				if (1)
+				if ( !(NPC->r.svFlags&SVF_NO_EXTRA_SOUNDS) )
 				{
 					//FIXME: store this in some sound field or parse in the soundTable like the animTable...
 					Q_strncpyz( sound, value, sizeof( sound ) );
@@ -2250,8 +2201,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 				{
 					continue;
 				}
-				//if ( !(NPC->svFlags&SVF_NO_EXTRA_SOUNDS) )
-				if (1)
+				if ( !(NPC->r.svFlags&SVF_NO_EXTRA_SOUNDS) )
 				{
 					//FIXME: store this in some sound field or parse in the soundTable like the animTable...
 					Q_strncpyz( sound, value, sizeof( sound ) );
@@ -2410,13 +2360,13 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 					continue;
 				}
 
-				if ( !NPC->client->saber[0].twoHanded )
+				if ( !(NPC->client->saber[0].saberFlags&SFL_TWO_HANDED) )
 				{//can't use a second saber if first one is a two-handed saber...?
 					char *saberName = (char *)BG_TempAlloc(4096);//G_NewString( value );
 					strcpy(saberName, value);
 
 					WP_SaberParseParms( saberName, &NPC->client->saber[1] );
-					if ( NPC->client->saber[1].twoHanded )
+					if ( (NPC->client->saber[1].saberFlags&SFL_TWO_HANDED) )
 					{//tsk tsk, can't use a twoHanded saber as second saber
 						WP_RemoveSaber( NPC->client->saber, 1 );
 					}
@@ -3207,9 +3157,7 @@ qboolean NPC_ParseParms( const char *NPCName, gentity_t *NPC )
 
 			if ( !parsingPlayer )
 			{
-#ifndef FINAL_BUILD
 				Com_Printf( "WARNING: unknown keyword '%s' while parsing '%s'\n", token, NPCName );
-#endif
 			}
 			SkipRestOfLine( &p );
 		}
@@ -3241,15 +3189,7 @@ Ghoul2 Insert Start
 			//we put the $ in front to indicate a name and not a model
 			strcpy(playerModel, va("$%s", NPCName));
 		}
-#ifdef _XBOX
-		// Gotta do this so NPC models don't take up model memory space
-		// reserved for players
-		ModelMem.SetNPCMode(true);
-#endif
 		SetupGameGhoul2Model(NPC, playerModel, customSkin);
-#ifdef _XBOX
-		ModelMem.SetNPCMode(false);
-#endif
 
 		if (!NPC->NPC_type)
 		{ //just do this for now so NPC_Precache can see the name.
@@ -3285,11 +3225,7 @@ Ghoul2 Insert End
 	return qtrue;
 }
 
-#ifdef _XBOX
-char *npcParseBuffer = NULL;
-#else
 char npcParseBuffer[MAX_NPC_DATA_SIZE];
-#endif
 
 void NPC_LoadParms( void ) 
 {
@@ -3307,10 +3243,6 @@ void NPC_LoadParms( void )
 
 	//now load in the extra .npc extensions
 	fileCnt = trap_FS_GetFileList("ext_data/NPCs", ".npc", npcExtensionListBuf, sizeof(npcExtensionListBuf) );
-
-#ifdef _XBOX
-	npcParseBuffer = (char *) Z_Malloc(MAX_NPC_DATA_SIZE, TAG_TEMP_WORKSPACE, qfalse, 4);
-#endif
 
 	holdChar = npcExtensionListBuf;
 	for ( i = 0; i < fileCnt; i++, holdChar += npcExtFNLen + 1 ) 
@@ -3333,8 +3265,11 @@ void NPC_LoadParms( void )
 			trap_FS_Read(npcParseBuffer, len, f);
 			npcParseBuffer[len] = 0;
 
+			len = COM_Compress( npcParseBuffer );
+
 			strcat( marker, npcParseBuffer );
 			strcat(marker, "\n");
+			len++;
 			trap_FS_FCloseFile(f);
 
 			totallen += len;
@@ -3343,10 +3278,4 @@ void NPC_LoadParms( void )
 			//rww  12/19/02-actually the probelm was npcParseBuffer not being nul-term'd, which could cause issues in the strcat too
 		}
 	}
-
-#ifdef _XBOX
-	Z_Free(npcParseBuffer);
-	npcParseBuffer = NULL;
-#endif
-
 }

@@ -1,8 +1,5 @@
 
-#include "../client/client.h"
-
-
-char	cl_cdkey[17] = "123456789";
+#include "client/client.h"
 
 cvar_t *cl_shownet;
 
@@ -48,7 +45,7 @@ qboolean UI_GameCommand( void ) {
 void CL_ForwardCommandToServer( const char *string ) {
 }
 
-void CL_ConsolePrint( const char *txt, qboolean silent ) {
+void CL_ConsolePrint( const char *txt ) {
 }
 
 void CL_JoystickEvent( int axis, int value, int time ) {

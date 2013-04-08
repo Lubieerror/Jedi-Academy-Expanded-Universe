@@ -1,5 +1,5 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 // tr_image.c
 #include "tr_local.h"
@@ -23,8 +23,8 @@ using namespace std;
 
 
 #define JPEG_INTERNALS
-#include "../jpeg-6/jpeglib.h"
-#include "../png/png.h"
+#include "jpeg-6/jpeglib.h"
+#include "png/png.h"
 
 #ifndef DEDICATED
 
@@ -1217,7 +1217,7 @@ image_t *R_CreateImage( const char *name, const byte *pic, int width, int height
 
 	if (name[0] == '*')
 	{
-		char *psLightMapNameSearchPos = strrchr(name,'/');
+		const char *psLightMapNameSearchPos = strrchr(name,'/');
 		if (  psLightMapNameSearchPos && !strncmp( psLightMapNameSearchPos+1, "lightmap", 8 ) ) {
 			isLightmap = qtrue;
 		}
@@ -2233,21 +2233,21 @@ void R_LoadImage( const char *shortname, byte **pic, int *width, int *height, GL
 	*width = 0;
 	*height = 0;
 	*format = GL_RGBA;
-	COM_StripExtension(shortname,name);
+	COM_StripExtension(shortname,name, sizeof( name ));
 	COM_DefaultExtension(name, sizeof(name), ".jpg");
 	LoadJPG( name, pic, width, height );
 	if (*pic) {
 		return;
 	}
 
-	COM_StripExtension(shortname,name);
+	COM_StripExtension(shortname,name, sizeof( name ));
 	COM_DefaultExtension(name, sizeof(name), ".png");	
 	LoadPNG32( name, pic, width, height, &bytedepth ); 			// try png first
 	if (*pic){
 		return;
 	}
 
-	COM_StripExtension(shortname,name);
+	COM_StripExtension(shortname,name, sizeof( name ));
 	COM_DefaultExtension(name, sizeof(name), ".tga");
 	LoadTGA( name, pic, width, height );            // try tga first
 	if (*pic){
@@ -2967,8 +2967,8 @@ RE_RegisterSkin
 bool gServerSkinHack = false;
 
 
-shader_t *R_FindServerShader( const char *name, const short *lightmapIndex, const byte *styles, qboolean mipRawImage );
-char *CommaParse( char **data_p );
+shader_t *R_FindServerShader( const char *name, const int *lightmapIndex, const byte *styles, qboolean mipRawImage );
+static char *CommaParse( char **data_p );
 /*
 ===============
 RE_SplitSkins
@@ -2996,6 +2996,10 @@ bool RE_SplitSkins(const char *INname, char *skinhead, char *skintorso, char *sk
 		//advance to second
 		char *p2 = strchr(p, '|'); 
 		assert(p2);
+		if (!p2)
+		{
+			return false;
+		}
 		*p2=0;
 		p2++;
 		strcat (skinhead, p);
@@ -3005,6 +3009,10 @@ bool RE_SplitSkins(const char *INname, char *skinhead, char *skintorso, char *sk
 		//advance to third
 		p = strchr(p2, '|');
 		assert(p);
+		if (!p)
+		{
+			return false;
+		}
 		*p=0;
 		p++;
 		strcat (skintorso,p2);

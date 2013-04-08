@@ -1,5 +1,5 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 // this include must remain at the top of every CPP file
 #include "client.h"
 
@@ -82,15 +82,14 @@ void SFxHelper::AdjustTime( int frametime )
 //------------------------------------------------------
 void SFxHelper::CameraShake( vec3_t origin, float intensity, int radius, int time )
 {
-	TCGCameraShake	*data = (TCGCameraShake *)cl->mSharedMemory;
+	TCGCameraShake	*data = (TCGCameraShake *)cl.mSharedMemory;
 
 	VectorCopy(origin, data->mOrigin);
 	data->mIntensity = intensity;
 	data->mRadius = radius;
 	data->mTime = time;
 
-//	VM_Call( cgvm, CG_FX_CAMERASHAKE ); 
-	//FIXME
+	VM_Call( cgvm, CG_FX_CAMERASHAKE ); 
 }
 
 //------------------------------------------------------
@@ -98,7 +97,7 @@ qboolean SFxHelper::GetOriginAxisFromBolt(CGhoul2Info_v *pGhoul2, int mEntNum, i
 {
 	qboolean doesBoltExist;
 	mdxaBone_t 		boltMatrix;
-	TCGGetBoltData	*data = (TCGGetBoltData*)cl->mSharedMemory;
+	TCGGetBoltData	*data = (TCGGetBoltData*)cl.mSharedMemory;
 	data->mEntityNum = mEntNum;
 	VM_Call( cgvm, CG_GET_LERP_DATA );//this func will zero out pitch and roll for players, and ridable vehicles
 

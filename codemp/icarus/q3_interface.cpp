@@ -1,5 +1,5 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 // ICARUS Engine Interface File
 //
@@ -8,8 +8,8 @@
 //
 //	-- jweier
 
-#include "../game/g_public.h"
-#include "../server/server.h"
+#include "game/g_public.h"
+#include "server/server.h"
 #include "interface.h"
 #include "GameInterface.h"
 #include "Q3_Interface.h"
@@ -24,12 +24,8 @@ stringID_table_t tagsTable [] =
 }
 */
 
-//rwwFIXEFIXME: Put somewhere else
-inline float Q_flrand(float min, float max) {
-	return ((rand() * (max - min)) / 32768.0F) + min;
-}
-
-qboolean COM_ParseString( char **data, char **s ); 
+extern float Q_flrand(float min, float max);
+extern qboolean COM_ParseString( char **data, char **s ); 
 
 //=======================================================================
 
@@ -98,12 +94,10 @@ WARNING: Clearing a taskID will make that task never finish unless you intend to
 			return the same taskID from somewhere else.
 -------------------------
 */
-#ifndef _XBOX	// We borrow the one in g_ICARUScb.c
 void Q3_TaskIDClear( int *taskID )
 {
 	*taskID = -1;
 }
-#endif
 
 /*
 -------------------------
@@ -732,14 +726,10 @@ void CGCam_Move( vec3_t dest, float duration )
 	CGCam_Anything();
 }
 
-#ifdef _XBOX
-void CGCam_Shake( float intensity, int duration );
-#else
 void CGCam_Shake( float intensity, int duration )
 {
 	CGCam_Anything();
 }
-#endif
 
 void CGCam_Follow( const char *cameraGroup, float speed, float initLerp )
 {

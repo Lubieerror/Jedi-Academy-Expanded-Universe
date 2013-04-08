@@ -1,13 +1,13 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 #include "cm_local.h"
 #include "cm_patch.h"
 #include "cm_landscape.h"
-#include "../qcommon/GenericParser2.h"
+#include "qcommon/GenericParser2.h"
 #include "cm_randomterrain.h"
 
-#ifdef _WIN32
+#if defined(_WIN32) && defined(_MSC_VER) && (_MSC_VER < 1600)
 #pragma optimize("p", on)
 #endif
 
@@ -163,7 +163,9 @@ CCMLandScape::CCMLandScape(const char *configstring, bool server)
 	if(strlen(heightMap))
 	{
 		byte	*imageData;
+#ifndef DEDICATED
 		int		iWidth, iHeight;
+#endif
 
 		Com_DPrintf("CM_Terrain: Loading heightmap %s.....\n", heightMap);
 		mRandomTerrain = 0;
@@ -233,11 +235,7 @@ void CCMPatch::InitPlane(struct cbrushside_s *side, cplane_t *plane, vec3_t p0, 
 	plane->type = PlaneTypeForNormal(plane->normal);
 	SetPlaneSignbits(plane);
 
-#ifdef _XBOX
-	cmg.planes[side->planeNum.GetValue()] = *plane;
-#else
 	side->plane = plane;
-#endif
 }
 
 // Create the planes required for collision detection
@@ -301,7 +299,6 @@ void* CCMPatch::GetAdjacentBrushX ( int x, int y )
 
 void CCMPatch::CreatePatchPlaneData(void)
 {				
-#ifndef PRE_RELEASE_DEMO
 	int				realWidth;
 	int				x, y, i, j;
 #if	0
@@ -459,11 +456,7 @@ void CCMPatch::CreatePatchPlaneData(void)
 			if ( y > 0 && y < owner->GetPatchHeight ( ) - 1 )
 			{
 				cbrush_t* abovebrush = (cbrush_t*)GetAdjacentBrushY ( x, y );
-#ifdef _XBOX
-				cplane_t* aboveplane = &cmg.planes[abovebrush->sides->planeNum.GetValue()];
-#else
 				cplane_t* aboveplane = abovebrush->sides->plane;
-#endif
 
 				V = DotProduct ( aboveplane->normal, ((y+x)&1)?(localCoords[2]):(localCoords[1]) ) - aboveplane->dist;
 
@@ -481,12 +474,7 @@ void CCMPatch::CreatePatchPlaneData(void)
 			if ( x > 0 && x < owner->GetPatchWidth ( ) - 1 )
 			{
 				cbrush_t* abovebrush = (cbrush_t*)GetAdjacentBrushX ( x, y );
-
-#ifdef _XBOX
-				cplane_t* aboveplane = &cmg.planes[abovebrush->sides->planeNum.GetValue()];
-#else
 				cplane_t* aboveplane = abovebrush->sides->plane;
-#endif
 
 				V = DotProduct ( aboveplane->normal, localCoords[1] ) - aboveplane->dist;
 
@@ -518,12 +506,10 @@ void CCMPatch::CreatePatchPlaneData(void)
 #endif
 		}
 	}
-#endif // PRE_RELEASE_DEMO
 }
 
 void CCMPatch::Init(CCMLandScape *ls, int heightX, int heightY, vec3_t world, byte *hMap, byte *patchBrushData)
 {
-#ifndef PRE_RELEASE_DEMO
 	int		min, max, x, y, height;
 
 	// Set owning landscape
@@ -587,7 +573,6 @@ void CCMPatch::Init(CCMLandScape *ls, int heightX, int heightY, vec3_t world, by
 	// Set base of brush data from big array
 	mPatchBrushData = (cbrush_t *)patchBrushData; 
 	CreatePatchPlaneData();
-#endif // PRE_RELEASE_DEMO
 }
 
 CCMPatch *CCMLandScape::GetPatch(int x, int y)
@@ -988,7 +973,7 @@ void CCMLandScape::CalcRealCoords(void)
 
 			offset = (y * GetRealWidth()) + x;
 
-			VectorSet(icoords, x, y, mHeightMap[offset]);
+			VectorSetM(icoords, x, y, mHeightMap[offset]);
 			VectorScaleVectorAdd(GetMins(), icoords, GetTerxelSize(), mCoords[offset]);
 		}
 	}
@@ -1689,7 +1674,6 @@ CRandomTerrain *CreateRandomTerrain(const char *config, CCMLandScape *landscape,
 {
 	CRandomTerrain	*RandomTerrain = 0;
 
-#ifndef PRE_RELEASE_DEMO
 	char			*ptr;
 	unsigned long	seed;
 
@@ -1699,7 +1683,6 @@ CRandomTerrain *CreateRandomTerrain(const char *config, CCMLandScape *landscape,
 	
 	RandomTerrain = new CRandomTerrain;
 	RandomTerrain->Init(landscape, heightmap, width, height);
-#endif // #ifndef PRE_RELEASE_DEMO
 
 /*
 	RandomTerrain->CreatePath(0, -1, 0, 9, 0.1, 0.5, 0.5, 0.5, 0.05, 0.08, 0.31, 0.1, 3);
@@ -1715,6 +1698,6 @@ CRandomTerrain *CreateRandomTerrain(const char *config, CCMLandScape *landscape,
 
 // end
 
-#ifdef _WIN32
+#if defined(_WIN32) && defined(_MSC_VER) && (_MSC_VER < 1600)
 #pragma optimize("p", off)
 #endif

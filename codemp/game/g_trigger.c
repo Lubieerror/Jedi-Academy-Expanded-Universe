@@ -166,8 +166,6 @@ void multi_trigger( gentity_t *ent, gentity_t *activator )
 		}
 	}
 
-	bool forceMultiRun = false;
-
 	if (g_gametype.integer == GT_SIEGE && ent->genericValue1)
 	{
 		haltTrigger = qtrue;
@@ -205,7 +203,6 @@ void multi_trigger( gentity_t *ent, gentity_t *activator )
 						objItem->nextthink = 0;
 						objItem->neverFree = qfalse;
 						G_FreeEntity(objItem);
-						forceMultiRun = true;
 					}
 				}
 			}
@@ -301,7 +298,7 @@ void multi_trigger( gentity_t *ent, gentity_t *activator )
 		return;
 	}
 
-	if ( ent->nextthink > level.time && !forceMultiRun ) 
+	if ( ent->nextthink > level.time ) 
 	{
 		if( ent->spawnflags & 2048 ) // MULTIPLE - allow multiple entities to touch this trigger in a single frame
 		{
@@ -318,7 +315,7 @@ void multi_trigger( gentity_t *ent, gentity_t *activator )
 	}
 
 	// if the player has already activated this trigger this frame
-	if( activator && !activator->s.number && ent->aimDebounceTime == level.time && !forceMultiRun )
+	if( activator && activator->s.number < MAX_CLIENTS && ent->aimDebounceTime == level.time )
 	{
 		return;	
 	}
@@ -330,7 +327,7 @@ void multi_trigger( gentity_t *ent, gentity_t *activator )
 
 	ent->activator = activator;
 
-	if(ent->delay && ent->painDebounceTime < (level.time + ent->delay) && !forceMultiRun)
+	if(ent->delay && ent->painDebounceTime < (level.time + ent->delay) )
 	{//delay before firing trigger
 		ent->think = multi_trigger_run;
 		ent->nextthink = level.time + ent->delay;
@@ -1791,4 +1788,192 @@ void SP_func_timer( gentity_t *self ) {
 	self->r.svFlags = SVF_NOCLIENT;
 }
 
+gentity_t *asteroid_pick_random_asteroid( gentity_t *self )
+{
+	int			t_count = 0, pick;
+	gentity_t	*t = NULL;
 
+	while ( (t = G_Find (t, FOFS(targetname), self->target)) != NULL )
+	{
+		if (t != self)
+		{
+			t_count++;
+		}
+	}
+
+	if(!t_count)
+	{
+		return NULL;
+	}
+
+	if(t_count == 1)
+	{
+		return t;
+	}
+
+	//FIXME: need a seed
+	pick = Q_irand(1, t_count);
+	t_count = 0;
+	while ( (t = G_Find (t, FOFS(targetname), self->target)) != NULL )
+	{
+		if (t != self)
+		{
+			t_count++;
+		}
+		else
+		{
+			continue;
+		}
+		
+		if(t_count == pick)
+		{
+			return t;
+		}
+	}
+	return NULL;
+}
+
+int asteroid_count_num_asteroids( gentity_t *self )
+{
+	int	i, count = 0;
+
+	for ( i = MAX_CLIENTS; i < ENTITYNUM_WORLD; i++ )
+	{
+		if ( !g_entities[i].inuse )
+		{
+			continue;
+		}
+		if ( g_entities[i].r.ownerNum == self->s.number )
+		{
+			count++;
+		}
+	}
+	return count;
+}
+
+extern void SP_func_rotating (gentity_t *ent);
+extern void Q3_Lerp2Origin( int taskID, int entID, vec3_t origin, float duration );
+void asteroid_field_think(gentity_t *self)
+{
+	int numAsteroids = asteroid_count_num_asteroids( self );
+
+	self->nextthink = level.time + 500;
+
+	if ( numAsteroids < self->count )
+	{
+		//need to spawn a new asteroid
+		gentity_t *newAsteroid = G_Spawn();
+		if ( newAsteroid )
+		{
+			vec3_t startSpot, endSpot, startAngles;
+			float dist, speed = flrand( self->speed * 0.25f, self->speed * 2.0f );
+			int	capAxis, axis, time = 0;
+			gentity_t *copyAsteroid = asteroid_pick_random_asteroid( self );
+			if ( copyAsteroid )
+			{
+				newAsteroid->model = copyAsteroid->model;
+				newAsteroid->model2 = copyAsteroid->model2;
+				newAsteroid->health = copyAsteroid->health;
+				newAsteroid->spawnflags = copyAsteroid->spawnflags;
+				newAsteroid->mass = copyAsteroid->mass;
+				newAsteroid->damage = copyAsteroid->damage;
+				newAsteroid->speed = copyAsteroid->speed;
+
+				G_SetOrigin( newAsteroid, copyAsteroid->s.origin );
+				G_SetAngles( newAsteroid, copyAsteroid->s.angles );
+				newAsteroid->classname = "func_rotating";
+
+				SP_func_rotating( newAsteroid );
+
+				newAsteroid->genericValue15 = copyAsteroid->genericValue15;
+				newAsteroid->s.iModelScale = copyAsteroid->s.iModelScale;
+				newAsteroid->maxHealth = newAsteroid->health;
+				G_ScaleNetHealth(newAsteroid);
+				newAsteroid->radius = copyAsteroid->radius;
+				newAsteroid->material = copyAsteroid->material;
+				//CacheChunkEffects( self->material );
+
+				//keep track of it
+				newAsteroid->r.ownerNum = self->s.number;
+
+				//move it
+				capAxis = Q_irand( 0, 2 );
+				for ( axis = 0; axis < 3; axis++ )
+				{
+					if ( axis == capAxis )
+					{
+						if ( Q_irand( 0, 1 ) )
+						{
+							startSpot[axis] = self->r.mins[axis];
+							endSpot[axis] = self->r.maxs[axis];
+						}
+						else
+						{
+							startSpot[axis] = self->r.maxs[axis];
+							endSpot[axis] = self->r.mins[axis];
+						}
+					}
+					else
+					{
+						startSpot[axis] = self->r.mins[axis]+(flrand(0,1.0f)*(self->r.maxs[axis]-self->r.mins[axis]));
+						endSpot[axis] = self->r.mins[axis]+(flrand(0,1.0f)*(self->r.maxs[axis]-self->r.mins[axis]));
+					}
+				}
+				//FIXME: maybe trace from start to end to make sure nothing is in the way?  How big of a trace?
+
+				G_SetOrigin( newAsteroid, startSpot );
+				dist = Distance( endSpot, startSpot );
+				time = ceil(dist/speed)*1000;
+				Q3_Lerp2Origin( -1, newAsteroid->s.number, endSpot, time );
+
+				//spin it
+				startAngles[0] = flrand( -360, 360 );
+				startAngles[1] = flrand( -360, 360 );
+				startAngles[2] = flrand( -360, 360 );
+				G_SetAngles( newAsteroid, startAngles );
+				newAsteroid->s.apos.trDelta[0] = flrand( -100, 100 );
+				newAsteroid->s.apos.trDelta[1] = flrand( -100, 100 );
+				newAsteroid->s.apos.trDelta[2] = flrand( -100, 100 );
+				newAsteroid->s.apos.trTime = level.time;
+				newAsteroid->s.apos.trType = TR_LINEAR;
+
+				//remove itself when done
+				newAsteroid->think = G_FreeEntity;
+				newAsteroid->nextthink = level.time+time;
+
+				//think again sooner if need even more
+				if ( numAsteroids+1 < self->count )
+				{//still need at least one more
+					//spawn it in 100ms
+					self->nextthink = level.time + 100;
+				}
+			}
+		}
+	}
+}
+
+/*QUAKED trigger_asteroid_field (.5 .5 .5) ? 
+speed - how fast, on average, the asteroid moves
+count - how many asteroids, max, to have at one time
+target - target this at func_rotating asteroids
+*/
+void SP_trigger_asteroid_field(gentity_t *self)
+{
+	trap_SetBrushModel( self, self->model );
+	self->r.contents = 0;
+
+	if ( !self->count )
+	{
+		self->health = 20;
+	}
+
+	if ( !self->speed )
+	{
+		self->speed = 10000;
+	}
+
+	self->think = asteroid_field_think;
+	self->nextthink = level.time + 100;
+
+    trap_LinkEntity(self);
+}

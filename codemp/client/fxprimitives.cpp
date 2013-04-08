@@ -1,6 +1,6 @@
 // this include must remain at the top of every CPP file
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 #include "client.h"
 
@@ -9,17 +9,12 @@
 #endif
 
 #if !defined(G2_H_INC)
-	#include "../ghoul2/G2.h"
-	#include "../ghoul2/G2_local.h"
+	#include "ghoul2/G2.h"
+	#include "ghoul2/G2_local.h"
 #endif
 
 #ifdef VV_LIGHTING
-#include "../win32/glw_win_dx8.h"
-#endif
-
-#ifdef _XBOX
-#include "../cgame/cg_local.h"
-#include "../client/cl_data.h"
+#include "renderer/tr_lightmanager.h"
 #endif
 
 extern int		drawnFx;
@@ -83,30 +78,13 @@ bool CParticle::Cull(void)
 	}
 
 	// Get the direction to the view
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue)
-		VectorSubtract( mOrigin1, cg->refdef.vieworg, dir );
-	else
-#endif
 	VectorSubtract( mOrigin1, theFxHelper.refdef->vieworg, dir );
 
 	// Check if it's behind the viewer
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue) {
-		if ( (DotProduct( cg->refdef.viewaxis[0], dir )) < 0) // cg.cosHalfFOV * (len - mRadius) )
-		{
-			return true;
-		}
-	}
-	else {
-#endif
 	if ( (DotProduct( theFxHelper.refdef->viewaxis[0], dir )) < 0) // cg.cosHalfFOV * (len - mRadius) )
 	{
 		return true;
 	}
-#ifdef _XBOX
-	}
-#endif
 
 	// don't cull if this is hacked to show up close to the inview wpn
 	if (mFlags & FX_DEPTH_HACK)
@@ -253,7 +231,7 @@ bool CParticle::UpdateOrigin(void)
 			// if this returns solid, we need to do a trace
 			if (!com_RMG || com_RMG->integer)
 			{	// don't do this call for RMG maps
-				TCGPointContents	*data = (TCGPointContents *)cl->mSharedMemory;
+				TCGPointContents	*data = (TCGPointContents *)cl.mSharedMemory;
 
 				VectorCopy(new_origin, data->mPoint);
 				data->mPassEntityNum = ENTITYNUM_WORLD;
@@ -671,30 +649,13 @@ bool COrientedParticle::Cull(void)
 //	float	len;
 
 	// Get the direction to the view
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue) 
-		VectorSubtract( mOrigin1, cg->refdef.vieworg, dir );
-	else
-#endif
 	VectorSubtract( mOrigin1, theFxHelper.refdef->vieworg, dir );
 
 	// Check if it's behind the viewer
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue) {
-		if ( (DotProduct( cg->refdef.viewaxis[0], dir )) < 0 )
-		{
-			return true;
-		}
-	}
-	else {
-#endif
 	if ( (DotProduct( theFxHelper.refdef->viewaxis[0], dir )) < 0 )
 	{
 		return true;
 	}
-#ifdef _XBOX
-	}
-#endif
 
 //	len = VectorLengthSquared( dir );
 
@@ -1532,7 +1493,11 @@ void CEmitter::UpdateAngles(void)
 //----------------------------
 void CLight::Draw(void)
 {
+#ifdef VV_LIGHTING
+	VVLightMan.RE_AddLightToScene( mOrigin1, mRefEnt.radius, mRefEnt.origin[0], mRefEnt.origin[1], mRefEnt.origin[2] );
+#else
 	theFxHelper.AddLightToScene( mOrigin1, mRefEnt.radius, mRefEnt.origin[0], mRefEnt.origin[1], mRefEnt.origin[2] );
+#endif
 	drawnFx++;	
 }
 
@@ -1856,30 +1821,13 @@ bool CPoly::Cull(void)
 	vec3_t	dir;
 
 	// Get the direction to the view
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue)
-		VectorSubtract( mOrigin1, cg->refdef.vieworg, dir );
-	else
-#endif
 	VectorSubtract( mOrigin1, theFxHelper.refdef->vieworg, dir );
 
 	// Check if it's behind the viewer
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue) {
-		if ( (DotProduct( cg->refdef.viewaxis[0], dir )) < 0 )
-		{
-			return true;
-		}
-	}
-	else {
-#endif
 	if ( (DotProduct( theFxHelper.refdef->viewaxis[0], dir )) < 0 )
 	{
 		return true;
 	}
-#ifdef _XBOX
-	}
-#endif
 
 	float len = VectorLengthSquared( dir );
 
@@ -2060,80 +2008,29 @@ bool CBezier::Cull( void )
 {
 	vec3_t	dir;
 
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue)
-		VectorSubtract( mOrigin1, cg->refdef.vieworg, dir );
-	else
-#endif
 	VectorSubtract( mOrigin1, theFxHelper.refdef->vieworg, dir );
 
 	//Check if it's in front of the viewer
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue) {
-		if ( (DotProduct( cg->refdef.viewaxis[0], dir )) >= 0 )
-		{
-			return false;	//don't cull
-		}
-	}
-	else {
-#endif
 	if ( (DotProduct( theFxHelper.refdef->viewaxis[0], dir )) >= 0 )
 	{
 		return false;	//don't cull
 	}
-#ifdef _XBOX
-	}
-#endif
 
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue)
-		VectorSubtract( mOrigin2, cg->refdef.vieworg, dir );
-	else
-#endif
 	VectorSubtract( mOrigin2, theFxHelper.refdef->vieworg, dir );
 
 	//Check if it's in front of the viewer
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue) {
-		if ( (DotProduct( cg->refdef.viewaxis[0], dir )) >= 0 )
-		{
-			return false;
-		}
-	}
-	else {
-#endif
 	if ( (DotProduct( theFxHelper.refdef->viewaxis[0], dir )) >= 0 )
 	{
 		return false;
 	}
-#ifdef _XBOX
-	}
-#endif
 
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue)
-		VectorSubtract( mControl1, cg->refdef.vieworg, dir );
-	else
-#endif
 	VectorSubtract( mControl1, theFxHelper.refdef->vieworg, dir );
 
 	//Check if it's in front of the viewer
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue) {
-		if ( (DotProduct( cg->refdef.viewaxis[0], dir )) >= 0 )
-		{
-			return false;
-		}
-	}
-	else {
-#endif
 	if ( (DotProduct( theFxHelper.refdef->viewaxis[0], dir )) >= 0 )
 	{
 		return false;
 	}
-#ifdef _XBOX
-	}
-#endif
 
 	return true; //all points behind viewer
 }
@@ -2174,11 +2071,6 @@ inline void CBezier::DrawSegment( vec3_t start, vec3_t end, float texcoord1, flo
 	float			scaleBottom = 0.0f, scaleTop = 0.0f;
 
 	VectorSubtract( end, start, lineDir );
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue )
-		VectorSubtract( end, cg->refdef.vieworg, viewDir );
-	else
-#endif
 	VectorSubtract( end, theFxHelper.refdef->vieworg, viewDir );
 	CrossProduct( lineDir, viewDir, cross );
 	VectorNormalize( cross );
@@ -2324,26 +2216,12 @@ bool FX_WorldToScreen(vec3_t worldCoord, float *x, float *y)
 
 	//NOTE: did it this way because most draw functions expect virtual 640x480 coords
 	//	and adjust them for current resolution
-#ifdef _XBOX
-	if(glw_state->isWidescreen)
-		xcenter = 720 / 2;
-	else
-#endif
 	xcenter = 640 / 2;//gives screen coords in virtual 640x480, to be adjusted when drawn
 	ycenter = 480 / 2;//gives screen coords in virtual 640x480, to be adjusted when drawn
 
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue) {
-		VectorSubtract (worldCoord, cg->refdef.vieworg, local);
-		AngleVectors (cg->refdef.viewangles, vfwd, vright, vup);
-	}
-	else {
-#endif
 	VectorSubtract (worldCoord, theFxHelper.refdef->vieworg, local);
+
 	AngleVectors (theFxHelper.refdef->viewangles, vfwd, vright, vup);
-#ifdef _XBOX
-	}
-#endif
 
 	transformed[0] = DotProduct(local,vright);
 	transformed[1] = DotProduct(local,vup);
@@ -2355,19 +2233,8 @@ bool FX_WorldToScreen(vec3_t worldCoord, float *x, float *y)
 		return false;
 	}
 	// Simple convert to screen coords.
-	float xzi, yzi;
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue) {
-		xzi = xcenter / transformed[2] * (90.0/cg->refdef.fov_x);
-		yzi = ycenter / transformed[2] * (90.0/cg->refdef.fov_y);
-	}
-	else {
-#endif
-	xzi = xcenter / transformed[2] * (90.0/theFxHelper.refdef->fov_x);
-	yzi = ycenter / transformed[2] * (90.0/theFxHelper.refdef->fov_y);
-#ifdef _XBOX
-	}
-#endif
+	float xzi = xcenter / transformed[2] * (90.0/theFxHelper.refdef->fov_x);
+	float yzi = ycenter / transformed[2] * (90.0/theFxHelper.refdef->fov_y);
 
 	*x = (xcenter + xzi * transformed[0]);
 	*y = (ycenter - yzi * transformed[1]);
@@ -2385,19 +2252,9 @@ void CFlash::Init( void )
 	vec3_t	dif;
 	float	mod = 1.0f, dis = 0.0f, maxRange = 900;
 
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue)
-		VectorSubtract( mOrigin1, cg->refdef.vieworg, dif );
-	else
-#endif
 	VectorSubtract( mOrigin1, theFxHelper.refdef->vieworg, dif );
 	dis = VectorNormalize( dif );
 
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue)
-		mod = DotProduct( dif, cg->refdef.viewaxis[0] );
-	else
-#endif
 	mod = DotProduct( dif, theFxHelper.refdef->viewaxis[0] );
 
 	if ( dis > maxRange || ( mod < 0.5f && dis > 100 ))
@@ -2445,18 +2302,8 @@ void CFlash::Draw( void )
 	}
 	else
 	{
-#ifdef _XBOX
-		if(ClientManager::splitScreenMode == qtrue) {
-			VectorCopy( cg->refdef.vieworg, mRefEnt.origin );
-			VectorMA( mRefEnt.origin, 12, cg->refdef.viewaxis[0], mRefEnt.origin );
-		}
-		else {
-#endif
 		VectorCopy( theFxHelper.refdef->vieworg, mRefEnt.origin );
 		VectorMA( mRefEnt.origin, 12, theFxHelper.refdef->viewaxis[0], mRefEnt.origin );
-#ifdef _XBOX
-		}
-#endif
 		mRefEnt.radius = 11.0f;
 
 		theFxHelper.AddFxToScene( &mRefEnt );

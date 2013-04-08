@@ -11,7 +11,7 @@ extern qboolean G_FlyVehicleDestroySurface( gentity_t *veh, int surface );
 extern void G_VehicleSetDamageLocFlags( gentity_t *veh, int impactDir, int deathPoint );
 extern void G_VehUpdateShields( gentity_t *targ );
 extern void G_LetGoOfWall( gentity_t *ent );
-
+extern void BG_ClearRocketLock( playerState_t *ps );
 //rww - pd
 void BotDamageNotification(gclient_t *bot, gentity_t *attacker);
 //end rww
@@ -1748,12 +1748,12 @@ gentity_t *G_GetJediMaster(void)
 	while (i < MAX_CLIENTS)
 	{
 		ent = &g_entities[i];
-/*
+
 		if (ent && ent->inuse && ent->client && ent->client->ps.isJediMaster)
 		{
 			return ent;
 		}
-*/
+
 		i++;
 	}
 
@@ -2070,6 +2070,8 @@ extern void Rancor_DropVictim( gentity_t *self );
 extern qboolean g_dontFrickinCheck;
 extern qboolean g_endPDuel;
 extern qboolean g_noPDuelCheck;
+extern void saberReactivate(gentity_t *saberent, gentity_t *saberOwner);
+extern void saberBackToOwner(gentity_t *saberent);
 void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int damage, int meansOfDeath ) {
 	gentity_t	*ent;
 	int			anim;
@@ -2214,6 +2216,18 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 	G_BreakArm(self, 0); //unbreak anything we have broken
 	self->client->ps.saberEntityNum = self->client->saberStoredIndex; //in case we died while our saber was knocked away.
 
+	if (self->client->ps.weapon == WP_SABER && self->client->saberKnockedTime)
+	{
+		gentity_t *saberEnt = &g_entities[self->client->ps.saberEntityNum];
+		//G_Printf("DEBUG: Running saber cleanup for %s\n", self->client->pers.netname);
+		self->client->saberKnockedTime = 0;
+		saberReactivate(saberEnt, self);
+		saberEnt->r.contents = CONTENTS_LIGHTSABER;
+		saberEnt->think = saberBackToOwner;
+		saberEnt->nextthink = level.time;
+		G_RunObject(saberEnt);
+	}
+
 	self->client->bodyGrabIndex = ENTITYNUM_NONE;
 	self->client->bodyGrabTime = 0;
 
@@ -2271,6 +2285,8 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 				AngleVectors( self->r.currentAngles, NULL, NULL, up );
 				G_PlayEffectID( G_EffectIndex("chunks/r5d2head_veh"), self->r.currentOrigin, up );
 			}
+			break;
+		default:
 			break;
 		}
 	}
@@ -2376,6 +2392,9 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 	self->client->ps.heldByClient = 0;
 	self->client->beingThrown = 0;
 	self->client->doingThrow = 0;
+	BG_ClearRocketLock( &self->client->ps );
+	self->client->isHacking = 0;
+	self->client->ps.hackingTime = 0;
 
 	if (inflictor && inflictor->activator && !inflictor->client && !attacker->client &&
 		inflictor->activator->client && inflictor->activator->inuse &&
@@ -2383,16 +2402,20 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 	{
 		attacker = inflictor->activator;
 	}
-/*
+
 	if (self->client && self->client->ps.isJediMaster)
 	{
 		wasJediMaster = qtrue;
 	}
-*/
+
 	//if he was charging or anything else, kill the sound
 	G_MuteSound(self->s.number, CHAN_WEAPON);
 
-	BlowDetpacks(self); //blow detpacks if they're planted
+	//Raz: Siege exploit where you could place detpack on your own objectives, change team, and instantly win.
+	if ( g_gametype.integer == GT_SIEGE && meansOfDeath == MOD_TEAM_CHANGE )
+		RemoveDetpacks( self );
+	else
+		BlowDetpacks(self); //blow detpacks if they're planted
 
 	self->client->ps.fd.forceDeactivateAll = 1;
 
@@ -2455,12 +2478,12 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 		}
 	}
 
-//	G_LogWeaponKill(killer, meansOfDeath);
-//	G_LogWeaponDeath(self->s.number, self->s.weapon);
-//	if (attacker && attacker->client && attacker->inuse)
-//	{
-//		G_LogWeaponFrag(killer, self->s.number);
-//	}
+	G_LogWeaponKill(killer, meansOfDeath);
+	G_LogWeaponDeath(self->s.number, self->s.weapon);
+	if (attacker && attacker->client && attacker->inuse)
+	{
+		G_LogWeaponFrag(killer, self->s.number);
+	}
 
 	// broadcast the death event to everyone
 	if (self->s.eType != ET_NPC && !g_noPDuelCheck)
@@ -2470,7 +2493,7 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 		ent->s.otherEntityNum = self->s.number;
 		ent->s.otherEntityNum2 = killer;
 		ent->r.svFlags = SVF_BROADCAST;	// send to everyone
-//		ent->s.isJediMaster = wasJediMaster;
+		ent->s.isJediMaster = wasJediMaster;
 	}
 
 	self->enemy = attacker;
@@ -2515,7 +2538,6 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 			{
 				AddScore( attacker, self->r.currentOrigin, -1 );
 			}
-/*
 			if (g_gametype.integer == GT_JEDIMASTER)
 			{
 				if (self->client && self->client->ps.isJediMaster)
@@ -2526,9 +2548,7 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 					self->client->ps.isJediMaster = qfalse;
 				}
 			}
-*/
 		} else {
-/*
 			if (g_gametype.integer == GT_JEDIMASTER)
 			{
 				if ((attacker->client && attacker->client->ps.isJediMaster) ||
@@ -2553,7 +2573,6 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 				}
 			}
 			else
-*/
 			{
 				AddScore( attacker, self->r.currentOrigin, 1 );
 			}
@@ -2581,7 +2600,6 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 
 		}
 	} else {
-/*
 		if (self->client && self->client->ps.isJediMaster)
 		{ //killed ourself so return the saber to the original position
 		  //(to avoid people jumping off ledges and making the saber
@@ -2589,7 +2607,7 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 			ThrowSaberToAttacker(self, NULL);
 			self->client->ps.isJediMaster = qfalse;
 		}
-*/
+
 		if (g_gametype.integer == GT_DUEL)
 		{ //in duel, if you kill yourself, the person you are dueling against gets a kill for it
 			int otherClNum = -1;
@@ -2718,6 +2736,9 @@ extern void RunEmplacedWeapon( gentity_t *ent, usercmd_t **ucmd );
 
 	// remove powerups
 	memset( self->client->ps.powerups, 0, sizeof(self->client->ps.powerups) );
+
+	self->client->ps.stats[STAT_HOLDABLE_ITEMS] = 0;
+	self->client->ps.stats[STAT_HOLDABLE_ITEM] = 0;
 
 	// NOTENOTE No gib deaths right now, this is star wars.
 	/*
@@ -3058,12 +3079,12 @@ char *hitLocName[HL_MAX] =
 	"right hand",	//HL_HAND_RT,
 	"left hand",	//HL_HAND_LT,
 	"head",	//HL_HEAD
-//	"generic1",	//HL_GENERIC1,
-//	"generic2",	//HL_GENERIC2,
-//	"generic3",	//HL_GENERIC3,
-//	"generic4",	//HL_GENERIC4,
-//	"generic5",	//HL_GENERIC5,
-//	"generic6"	//HL_GENERIC6
+	"generic1",	//HL_GENERIC1,
+	"generic2",	//HL_GENERIC2,
+	"generic3",	//HL_GENERIC3,
+	"generic4",	//HL_GENERIC4,
+	"generic5",	//HL_GENERIC5,
+	"generic6"	//HL_GENERIC6
 };
 
 void G_GetDismemberLoc(gentity_t *self, vec3_t boltPoint, int limbType)
@@ -3216,7 +3237,7 @@ void G_GetDismemberBolt(gentity_t *self, vec3_t boltPoint, int limbType)
 		fVSpeed += self->client->ps.velocity[2];
 	}
 
-	fVSpeed *= 0.08;
+	fVSpeed *= 0.08f;
 
 	properOrigin[0] += addVel[0]*fVSpeed;
 	properOrigin[1] += addVel[1]*fVSpeed;
@@ -3246,6 +3267,8 @@ void G_GetDismemberBolt(gentity_t *self, vec3_t boltPoint, int limbType)
 		te = G_TempEntity( boltPoint, EV_SABER_HIT );
 		te->s.otherEntityNum = self->s.number;
 		te->s.otherEntityNum2 = ENTITYNUM_NONE;
+		te->s.weapon = 0;//saberNum
+		te->s.legsAnim = 0;//bladeNum
 
 		VectorCopy(boltPoint, te->s.origin);
 		VectorCopy(boltAngles, te->s.angles);
@@ -3304,9 +3327,7 @@ void LimbThink( gentity_t *ent )
 	ent->nextthink = level.time;
 }
 
-#include "../namespace_begin.h"
 extern qboolean BG_GetRootSurfNameWithVariant( void *ghoul2, const char *rootSurfName, char *returnSurfName, int returnSize );
-#include "../namespace_end.h"
 
 void G_Dismember( gentity_t *ent, gentity_t *enemy, vec3_t point, int limbType, float limbRollBase, float limbPitchBase, int deathAnim, qboolean postDeath )
 {
@@ -3363,7 +3384,7 @@ void G_Dismember( gentity_t *ent, gentity_t *enemy, vec3_t point, int limbType, 
 		Com_sprintf( stubCapName, sizeof( stubCapName), "%s_cap_r_leg", stubName );
 	}
 
-	if (ent->ghoul2 && limbName && trap_G2API_GetSurfaceRenderStatus(ent->ghoul2, 0, limbName))
+	if (ent->ghoul2 && limbName[0] && trap_G2API_GetSurfaceRenderStatus(ent->ghoul2, 0, limbName))
 	{ //is it already off? If so there's no reason to be doing it again, so get out of here.
 		return;
 	}
@@ -3480,16 +3501,44 @@ void G_Dismember( gentity_t *ent, gentity_t *enemy, vec3_t point, int limbType, 
 		}
 	}
 
-	if (ent->s.eType == ET_NPC && ent->ghoul2 && limbName && stubCapName)
+	if (ent->s.eType == ET_NPC && ent->ghoul2 && limbName[0] && stubCapName[0])
 	{ //if it's an npc remove these surfs on the server too. For players we don't even care cause there's no further dismemberment after death.
 		trap_G2API_SetSurfaceOnOff(ent->ghoul2, limbName, 0x00000100);
 		trap_G2API_SetSurfaceOnOff(ent->ghoul2, stubCapName, 0);
 	}
 
-	limb->s.customRGBA[0] = ent->s.customRGBA[0];
-	limb->s.customRGBA[1] = ent->s.customRGBA[1];
-	limb->s.customRGBA[2] = ent->s.customRGBA[2];
-	limb->s.customRGBA[3] = ent->s.customRGBA[3];
+	//Raz: Limbs now have team colours.
+	if ( g_gametype.integer >= GT_TEAM )
+	{//Team game
+		switch ( ent->client->sess.sessionTeam )
+		{
+		case TEAM_RED:
+			limb->s.customRGBA[0] = 255;
+			limb->s.customRGBA[1] = 0;
+			limb->s.customRGBA[2] = 0;
+			break;
+
+		case TEAM_BLUE:
+			limb->s.customRGBA[0] = 0;
+			limb->s.customRGBA[1] = 0;
+			limb->s.customRGBA[2] = 255;
+			break;
+
+		default:
+			limb->s.customRGBA[0] = ent->s.customRGBA[0];
+			limb->s.customRGBA[1] = ent->s.customRGBA[1];
+			limb->s.customRGBA[2] = ent->s.customRGBA[2];
+			limb->s.customRGBA[3] = ent->s.customRGBA[3];
+			break;
+		}
+	}
+	else
+	{//FFA
+		limb->s.customRGBA[0] = ent->s.customRGBA[0];
+		limb->s.customRGBA[1] = ent->s.customRGBA[1];
+		limb->s.customRGBA[2] = ent->s.customRGBA[2];
+		limb->s.customRGBA[3] = ent->s.customRGBA[3];
+	}
 
 	trap_LinkEntity( limb );
 }
@@ -3695,7 +3744,6 @@ qboolean G_GetHitLocFromSurfName( gentity_t *ent, const char *surfName, int *hit
 		}
 		return(qfalse);
 	}
-/*
 	else if ( ent->client && (ent->client->NPC_class == CLASS_MARK1) )
 	{
 		if (!Q_stricmp("l_arm",surfName))
@@ -3736,8 +3784,6 @@ qboolean G_GetHitLocFromSurfName( gentity_t *ent, const char *surfName, int *hit
 		}
 		return(qfalse);
 	}
-*/
-/*
 	else if ( ent->client && (ent->client->NPC_class == CLASS_MARK2) )
 	{
 		if (!Q_stricmp("torso_canister1",surfName))
@@ -3754,8 +3800,6 @@ qboolean G_GetHitLocFromSurfName( gentity_t *ent, const char *surfName, int *hit
 		}
 		return(qfalse);
 	}
-*/
-/*
 	else if ( ent->client && (ent->client->NPC_class == CLASS_GALAKMECH) )
 	{
 		if (!Q_stricmp("torso_antenna",surfName)||!Q_stricmp("torso_antenna_base",surfName))
@@ -3772,7 +3816,6 @@ qboolean G_GetHitLocFromSurfName( gentity_t *ent, const char *surfName, int *hit
 		}
 		return(qfalse);
 	}
-*/
 
 	//FIXME: check the hitLoc and hitDir against the cap tag for the place 
 	//where the split will be- if the hit dir is roughly perpendicular to 
@@ -4248,6 +4291,11 @@ void G_LocationBasedDamageModifier(gentity_t *ent, vec3_t point, int mod, int df
 		return;
 	}
 
+	if ( ent->client && ent->client->NPC_class == CLASS_VEHICLE )
+	{//no location-based damage on vehicles
+		return;
+	}
+
 	if ((d_saberGhoul2Collision.integer && ent->client && ent->client->g2LastSurfaceTime == level.time && mod == MOD_SABER) || //using ghoul2 collision? Then if the mod is a saber we should have surface data from the last hit (unless thrown).
 		(d_projectileGhoul2Collision.integer && ent->client && ent->client->g2LastSurfaceTime == level.time)) //It's safe to assume we died from the projectile that just set our surface index. So, go ahead and use that as the surf I guess.
 	{
@@ -4313,12 +4361,12 @@ qboolean G_ThereIsAMaster(void)
 	while (i < MAX_CLIENTS)
 	{
 		ent = &g_entities[i];
-/*
+
 		if (ent && ent->client && ent->client->ps.isJediMaster)
 		{
 			return qtrue;
 		}
-*/
+
 		i++;
 	}
 
@@ -4510,9 +4558,12 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		}
 	}
 
-	if (targ && targ->client && (targ->client->ps.fd.forcePowersActive & (1 << FP_RAGE)))
-	{
-		damage *= 0.5;
+	if ( !(dflags & DAMAGE_NO_PROTECTION) ) 
+	{//rage overridden by no_protection
+		if (targ && targ->client && (targ->client->ps.fd.forcePowersActive & (1 << FP_RAGE)))
+		{
+			damage *= 0.5;
+		}
 	}
 
 	// the intermission has allready been qualified for, so don't
@@ -4538,7 +4589,11 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 	}
 	// reduce damage by the attacker's handicap value
 	// unless they are rocket jumping
-	if ( attacker->client && attacker != targ && attacker->s.eType == ET_PLAYER ) {
+	if ( attacker->client 
+		&& attacker != targ 
+		&& attacker->s.eType == ET_PLAYER 
+		&& g_gametype.integer != GT_SIEGE ) 
+	{
 		max = attacker->client->ps.stats[STAT_MAX_HEALTH];
 		damage = damage * max / 100;
 	}
@@ -4605,21 +4660,40 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 			if ( (dflags&DAMAGE_SABER_KNOCKBACK1)
 				|| (dflags&DAMAGE_SABER_KNOCKBACK2) )
 			{//saber does knockback, scale it by the right number
+				if ( !saberKnockbackScale )
+				{
+					saberKnockbackScale = 1.0f;
+				}
 				if ( attacker
 					&& attacker->client )
 				{
-					if ( (dflags&DAMAGE_SABER_KNOCKBACK1) 
-						&& (dflags&DAMAGE_SABER_KNOCKBACK2) )
-					{//hit with both
-	                    saberKnockbackScale *= (attacker->client->saber[0].knockbackScale+attacker->client->saber[1].knockbackScale)*0.5f;
+					if ( (dflags&DAMAGE_SABER_KNOCKBACK1) )
+					{
+						if ( attacker && attacker->client )
+						{
+							saberKnockbackScale *= attacker->client->saber[0].knockbackScale;
+						}
 					}
-					else if ( (dflags&DAMAGE_SABER_KNOCKBACK1) )
-					{//hit with first only
-						saberKnockbackScale *= attacker->client->saber[0].knockbackScale;
+					if ( (dflags&DAMAGE_SABER_KNOCKBACK1_B2) )
+					{
+						if ( attacker && attacker->client )
+						{
+							saberKnockbackScale *= attacker->client->saber[0].knockbackScale2;
+						}
 					}
-					else
-					{//second only
-						saberKnockbackScale *= attacker->client->saber[1].knockbackScale;
+					if ( (dflags&DAMAGE_SABER_KNOCKBACK2) )
+					{
+						if ( attacker && attacker->client )
+						{
+							saberKnockbackScale *= attacker->client->saber[1].knockbackScale;
+						}
+					}
+					if ( (dflags&DAMAGE_SABER_KNOCKBACK2_B2) )
+					{
+						if ( attacker && attacker->client )
+						{
+							saberKnockbackScale *= attacker->client->saber[1].knockbackScale2;
+						}
 					}
 				}
 			}
@@ -4646,7 +4720,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		}
 		// set the timer so that the other client can't cancel
 		// out the movement immediately
-		if ( !targ->client->ps.pm_time && (g_saberDmgVelocityScale.integer || mod != MOD_SABER || (dflags&DAMAGE_SABER_KNOCKBACK1) || (dflags&DAMAGE_SABER_KNOCKBACK2) ) ) {
+		if ( !targ->client->ps.pm_time && (g_saberDmgVelocityScale.integer || mod != MOD_SABER || (dflags&DAMAGE_SABER_KNOCKBACK1) || (dflags&DAMAGE_SABER_KNOCKBACK2) || (dflags&DAMAGE_SABER_KNOCKBACK1_B2) || (dflags&DAMAGE_SABER_KNOCKBACK2_B2) ) ) {
 			int		t;
 
 			t = knockback * 2;
@@ -4668,7 +4742,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 	}
 
 	
-	if ( (g_trueJedi.integer || g_gametype.integer == GT_SIEGE)
+	if ( (g_jediVmerc.integer || g_gametype.integer == GT_SIEGE)
 		&& client )
 	{//less explosive damage for jedi, more saber damage for non-jedi
 		if ( client->ps.trueJedi 
@@ -4751,7 +4825,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 				return;
 			}
 		}
-/*
+
 		if (g_gametype.integer == GT_JEDIMASTER && !g_friendlyFire.integer &&
 			targ && targ->client && attacker && attacker->client &&
 			targ != attacker && !targ->client->ps.isJediMaster && !attacker->client->ps.isJediMaster &&
@@ -4759,7 +4833,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		{
 			return;
 		}
-*/
+
 		if (targ->s.number >= MAX_CLIENTS && targ->client 
 			&& targ->s.shouldtarget && targ->s.teamowner &&
 			attacker && attacker->inuse && attacker->client && targ->s.owner >= 0 && targ->s.owner < MAX_CLIENTS)
@@ -4832,15 +4906,17 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		}
 	}
 
-	// battlesuit protects from all radius damage (but takes knockback)
-	// and protects 50% against all damage
-	if ( client && client->ps.powerups[PW_BATTLESUIT] ) {
-		G_AddEvent( targ, EV_POWERUP_BATTLESUIT, 0 );
-		if ( ( dflags & DAMAGE_RADIUS ) || ( mod == MOD_FALLING ) ) {
-			return;
+	#ifdef BASE_COMPAT
+		// battlesuit protects from all radius damage (but takes knockback)
+		// and protects 50% against all damage
+		if ( client && client->ps.powerups[PW_BATTLESUIT] ) {
+			G_AddEvent( targ, EV_POWERUP_BATTLESUIT, 0 );
+			if ( ( dflags & DAMAGE_RADIUS ) || ( mod == MOD_FALLING ) ) {
+				return;
+			}
+			damage *= 0.5;
 		}
-		damage *= 0.5;
-	}
+	#endif
 
 	// add to the attacker's hit counter (if the target isn't a general entity like a prox mine)
 	if ( attacker->client && targ != attacker && targ->health > 0
@@ -5169,71 +5245,74 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		targ->client->lasthurt_mod = mod;
 	}
 
-	if (take && targ->client && (targ->client->ps.fd.forcePowersActive & (1 << FP_PROTECT)))
-	{
-		if (targ->client->ps.fd.forcePower)
+	if ( !(dflags & DAMAGE_NO_PROTECTION) ) 
+	{//protect overridden by no_protection
+		if (take && targ->client && (targ->client->ps.fd.forcePowersActive & (1 << FP_PROTECT)))
 		{
-			int maxtake = take;
-
-			//G_Sound(targ, CHAN_AUTO, protectHitSound);
-			if (targ->client->forcePowerSoundDebounce < level.time)
+			if (targ->client->ps.fd.forcePower)
 			{
-				G_PreDefSound(targ->client->ps.origin, PDSOUND_PROTECTHIT);
-				targ->client->forcePowerSoundDebounce = level.time + 400;
-			}
+				int maxtake = take;
 
-			if (targ->client->ps.fd.forcePowerLevel[FP_PROTECT] == FORCE_LEVEL_1)
-			{
-				famt = 1;
-				hamt = 0.40;
-
-				if (maxtake > 100)
+				//G_Sound(targ, CHAN_AUTO, protectHitSound);
+				if (targ->client->forcePowerSoundDebounce < level.time)
 				{
-					maxtake = 100;
+					G_PreDefSound(targ->client->ps.origin, PDSOUND_PROTECTHIT);
+					targ->client->forcePowerSoundDebounce = level.time + 400;
 				}
-			}
-			else if (targ->client->ps.fd.forcePowerLevel[FP_PROTECT] == FORCE_LEVEL_2)
-			{
-				famt = 0.5;
-				hamt = 0.60;
 
-				if (maxtake > 200)
+				if (targ->client->ps.fd.forcePowerLevel[FP_PROTECT] == FORCE_LEVEL_1)
 				{
-					maxtake = 200;
+					famt = 1;
+					hamt = 0.40f;
+
+					if (maxtake > 100)
+					{
+						maxtake = 100;
+					}
 				}
-			}
-			else if (targ->client->ps.fd.forcePowerLevel[FP_PROTECT] == FORCE_LEVEL_3)
-			{
-				famt = 0.25;
-				hamt = 0.80;
-
-				if (maxtake > 400)
+				else if (targ->client->ps.fd.forcePowerLevel[FP_PROTECT] == FORCE_LEVEL_2)
 				{
-					maxtake = 400;
+					famt = 0.5f;
+					hamt = 0.60f;
+
+					if (maxtake > 200)
+					{
+						maxtake = 200;
+					}
 				}
-			}
-
-			if (!targ->client->ps.powerups[PW_FORCE_BOON])
-			{
-				targ->client->ps.fd.forcePower -= maxtake*famt;
-			}
-			else
-			{
-				targ->client->ps.fd.forcePower -= (maxtake*famt)/2;
-			}
-			subamt = (maxtake*hamt)+(take-maxtake);
-			if (targ->client->ps.fd.forcePower < 0)
-			{
-				subamt += targ->client->ps.fd.forcePower;
-				targ->client->ps.fd.forcePower = 0;
-			}
-			if (subamt)
-			{
-				take -= subamt;
-
-				if (take < 0)
+				else if (targ->client->ps.fd.forcePowerLevel[FP_PROTECT] == FORCE_LEVEL_3)
 				{
-					take = 0;
+					famt = 0.25f;
+					hamt = 0.80f;
+
+					if (maxtake > 400)
+					{
+						maxtake = 400;
+					}
+				}
+
+				if (!targ->client->ps.powerups[PW_FORCE_BOON])
+				{
+					targ->client->ps.fd.forcePower -= maxtake*famt;
+				}
+				else
+				{
+					targ->client->ps.fd.forcePower -= (maxtake*famt)/2;
+				}
+				subamt = (maxtake*hamt)+(take-maxtake);
+				if (targ->client->ps.fd.forcePower < 0)
+				{
+					subamt += targ->client->ps.fd.forcePower;
+					targ->client->ps.fd.forcePower = 0;
+				}
+				if (subamt)
+				{
+					take -= subamt;
+
+					if (take < 0)
+					{
+						take = 0;
+					}
 				}
 			}
 		}
@@ -5302,9 +5381,12 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 			}
 		}
 
-		if (targ->client && (targ->client->ps.fd.forcePowersActive & (1 << FP_RAGE)) && (inflictor->client || attacker->client))
-		{
-			take /= (targ->client->ps.fd.forcePowerLevel[FP_RAGE]+1);
+		if ( !(dflags & DAMAGE_NO_PROTECTION) ) 
+		{//rage overridden by no_protection
+			if (targ->client && (targ->client->ps.fd.forcePowersActive & (1 << FP_RAGE)) && (inflictor->client || attacker->client))
+			{
+				take /= (targ->client->ps.fd.forcePowerLevel[FP_RAGE]+1);
+			}
 		}
 		targ->health = targ->health - take;
 
@@ -5320,15 +5402,18 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 			targ->client->ps.stats[STAT_HEALTH] = targ->health;
 		}
 
-		if (targ->client && (targ->client->ps.fd.forcePowersActive & (1 << FP_RAGE)) && (inflictor->client || attacker->client))
-		{
-			if (targ->health <= 0)
+		if ( !(dflags & DAMAGE_NO_PROTECTION) ) 
+		{//rage overridden by no_protection
+			if (targ->client && (targ->client->ps.fd.forcePowersActive & (1 << FP_RAGE)) && (inflictor->client || attacker->client))
 			{
-				targ->health = 1;
-			}
-			if (targ->client->ps.stats[STAT_HEALTH] <= 0)
-			{
-				targ->client->ps.stats[STAT_HEALTH] = 1;
+				if (targ->health <= 0)
+				{
+					targ->health = 1;
+				}
+				if (targ->client->ps.stats[STAT_HEALTH] <= 0)
+				{
+					targ->client->ps.stats[STAT_HEALTH] = 1;
+				}
 			}
 		}
 
@@ -5459,7 +5544,7 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 			}
 		}
 
-//		G_LogWeaponDamage(attacker->s.number, mod, take);
+		G_LogWeaponDamage(attacker->s.number, mod, take);
 	}
 
 }
@@ -5596,6 +5681,10 @@ qboolean G_RadiusDamage ( vec3_t origin, gentity_t *attacker, float damage, floa
 		if ( dist >= radius ) {
 			continue;
 		}
+
+		//JAC: Avoid infinite loop
+		if ( ent->health <= 0 )
+			continue;
 
 		points = damage * ( 1.0 - dist / radius );
 

@@ -380,6 +380,14 @@ bool Script_Write(LPCSTR psFullPathedFilename)
 
 			fclose(fhText);
 		}
+		/*
+		else
+		{
+			ErrorBox( va("Couldn't open file: %s\n", psFullPathedFilename));
+			return false;
+		}
+		*/
+
 	}
 
 	return !!fhText;

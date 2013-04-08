@@ -1,10 +1,10 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 // tr_QuickSprite.cpp: implementation of the CQuickSpriteSystem class.
 //
 //////////////////////////////////////////////////////////////////////
-//#include "../server/exe_headers.h"
+//#include "server/exe_headers.h"
 #include "tr_local.h"
 
 #include "tr_QuickSprite.h"
@@ -62,11 +62,7 @@ void CQuickSpriteSystem::Flush(void)
 	{ //enable hardware fog when we draw this thing if applicable -rww
 		fog_t *fog = tr.world->fogs + mFogIndex;
 
-#ifdef _XBOX
-		qglFogi(GL_FOG_MODE, GL_EXP2);
-#else
 		qglFogf(GL_FOG_MODE, GL_EXP2);
-#endif
 		qglFogf(GL_FOG_DENSITY, logtestExp2 / fog->parms.depthForOpaque);
 		qglFogfv(GL_FOG_COLOR, fog->parms.color);
 		qglEnable(GL_FOG);

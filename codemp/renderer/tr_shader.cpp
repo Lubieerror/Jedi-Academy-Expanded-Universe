@@ -1,5 +1,5 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 #include "tr_local.h"
 
@@ -93,8 +93,7 @@ const unsigned char g_strGlowPShaderARB[] =
 /***********************************************************************************************************/
 
 
-//static char *s_shaderText;
-extern char *shaderText;	// ONLY ONE FUCKING COPY OF THIS FUCKING SHIT!
+static char *s_shaderText;
 
 // the shader is parsed into these global variables, then copied into
 // dynamically allocated memory if it is valid.
@@ -123,7 +122,7 @@ qboolean ShaderHashTableExists(void)
 	return qfalse;
 }
 
-const short lightmapsNone[MAXLIGHTMAPS] = 
+const int lightmapsNone[MAXLIGHTMAPS] = 
 { 
 	LIGHTMAP_NONE,
 	LIGHTMAP_NONE,
@@ -131,7 +130,7 @@ const short lightmapsNone[MAXLIGHTMAPS] =
 	LIGHTMAP_NONE 
 };
 
-const short lightmaps2d[MAXLIGHTMAPS] = 
+const int lightmaps2d[MAXLIGHTMAPS] = 
 { 
 	LIGHTMAP_2D,
 	LIGHTMAP_2D,
@@ -139,7 +138,7 @@ const short lightmaps2d[MAXLIGHTMAPS] =
 	LIGHTMAP_2D 
 };
 
-const short lightmapsVertex[MAXLIGHTMAPS] = 
+const int lightmapsVertex[MAXLIGHTMAPS] = 
 { 
 	LIGHTMAP_BY_VERTEX,
 	LIGHTMAP_BY_VERTEX,
@@ -147,7 +146,7 @@ const short lightmapsVertex[MAXLIGHTMAPS] =
 	LIGHTMAP_BY_VERTEX 
 };
 
-const short lightmapsFullBright[MAXLIGHTMAPS] = 
+const int lightmapsFullBright[MAXLIGHTMAPS] = 
 {
 	LIGHTMAP_WHITEIMAGE,
 	LIGHTMAP_WHITEIMAGE,
@@ -175,12 +174,12 @@ R_CreateExtendedName
 ===============
 */
 //rwwRMG - added
-void R_CreateExtendedName(char *extendedName, const char *name, const short *lightmapIndex, const byte *styles)
+void R_CreateExtendedName(char *extendedName, const char *name, const int *lightmapIndex, const byte *styles)
 {
 	int		i;
 
 	// Set the basename
-	COM_StripExtension( name, extendedName );
+	COM_StripExtension( name, extendedName, MAX_QPATH );
 
 	// Add in lightmaps
 	if(lightmapIndex && styles)
@@ -300,7 +299,7 @@ void R_RemapShader(const char *shaderName, const char *newShaderName, const char
 
 	// remap all the shaders with the given name
 	// even tho they might have different lightmaps
-	COM_StripExtension( shaderName, strippedName );
+	COM_StripExtension( shaderName, strippedName, sizeof( strippedName ) );
 	hash = generateHashValue(strippedName, FILE_HASH_SIZE);
 	for (sh = hashTable[hash]; sh; sh = sh->next) {
 		if (Q_stricmp(sh->name, strippedName) == 0) {
@@ -328,9 +327,7 @@ qboolean ParseVector( const char **text, int count, float *v ) {
 	// FIXME: spaces are currently required after parens, should change parseext...
 	token = COM_ParseExt( text, qfalse );
 	if ( strcmp( token, "(" ) ) {
-#ifndef FINAL_BUILD
 		Com_Printf (S_COLOR_YELLOW  "WARNING: missing parenthesis in shader '%s'\n", shader.name );
-#endif
 		return qfalse;
 	}
 
@@ -345,9 +342,7 @@ qboolean ParseVector( const char **text, int count, float *v ) {
 
 	token = COM_ParseExt( text, qfalse );
 	if ( strcmp( token, ")" ) ) {
-#ifndef FINAL_BUILD
 		Com_Printf (S_COLOR_YELLOW  "WARNING: missing parenthesis in shader '%s'\n", shader.name );
-#endif
 		return qfalse;
 	}
 
@@ -922,10 +917,6 @@ static void ParseSurfaceSprites( const char *_text, shaderStage_t *stage )
 	stage->ss->density = density;
 	stage->ss->fadeDist = fadedist;
 
-#ifdef _XBOX
-	shader.needsNormal = true;
-#endif
-
 	// These are defaults that can be overwritten.
 	stage->ss->fadeMax = fadedist*1.33;
 	stage->ss->fadeScale = 0.0;
@@ -1341,7 +1332,7 @@ static qboolean ParseStage( shaderStage_t *stage, const char **text )
 				stage->bundle[0].image = NULL;
 				return qfalse;
 #else
-				stage->bundle[0].image = R_FindImageFile( token, (qboolean)!shader.noMipMaps, qfalse, qfalse, GL_REPEAT );
+				stage->bundle[0].image = R_FindImageFile( token, (qboolean)!shader.noMipMaps, (qboolean)!shader.noPicMip, (qboolean)!shader.noTC, GL_REPEAT );
 				if ( !stage->bundle[0].image )
 				{
 					Com_Printf (S_COLOR_YELLOW  "WARNING: R_FindImageFile could not find '%s' in shader '%s'\n", token, shader.name );
@@ -1363,14 +1354,14 @@ static qboolean ParseStage( shaderStage_t *stage, const char **text )
 				return qfalse;
 			}
 
-			stage->bundle[0].image = R_FindImageFile( token, !shader.noMipMaps, qfalse, qfalse, GL_REPEAT );
+			stage->bundle[0].image = R_FindImageFile( token, !shader.noMipMaps, !shader.noPicMip, !shader.noTC, GL_REPEAT );
 			if ( !stage->bundle[0].image )
 			{
 				Com_Printf( S_COLOR_YELLOW "WARNING: R_FindImageFile could not find '%s' in shader '%s'\n", token, shader.name );
 				return qfalse;
 			}
 
-//			stage->isSpecular = qtrue;
+			stage->isSpecular = qtrue;
 
 			shader.needsNormal = true;
 			shader.needsTangent = true;
@@ -1391,7 +1382,7 @@ static qboolean ParseStage( shaderStage_t *stage, const char **text )
 			stage->bundle[0].image = NULL;
 			return qfalse;
 #else
-			stage->bundle[0].image = R_FindImageFile( token, (qboolean)!shader.noMipMaps, qfalse, qfalse, GL_CLAMP );
+			stage->bundle[0].image = R_FindImageFile( token, (qboolean)!shader.noMipMaps, (qboolean)!shader.noPicMip, (qboolean)!shader.noTC, GL_CLAMP );
 			if ( !stage->bundle[0].image )
 			{
 				Com_Printf (S_COLOR_YELLOW  "WARNING: R_FindImageFile could not find '%s' in shader '%s'\n", token, shader.name );
@@ -1432,7 +1423,7 @@ static qboolean ParseStage( shaderStage_t *stage, const char **text )
 					stage->bundle[0].image = NULL;
 					return qfalse;
 #else
-					images[num] = R_FindImageFile( token, (qboolean)!shader.noMipMaps, qfalse, qfalse, bClamp?GL_CLAMP:GL_REPEAT );
+					images[num] = R_FindImageFile( token, (qboolean)!shader.noMipMaps, (qboolean)!shader.noPicMip, (qboolean)!shader.noTC, bClamp?GL_CLAMP:GL_REPEAT );
 					if ( !images[num] )
 					{
 						Com_Printf (S_COLOR_YELLOW  "WARNING: R_FindImageFile could not find '%s' in shader '%s'\n", token, shader.name );
@@ -1446,7 +1437,6 @@ static qboolean ParseStage( shaderStage_t *stage, const char **text )
 			stage->bundle[0].image = (image_t*) Hunk_Alloc( stage->bundle[0].numImageAnimations * sizeof( image_t* ), h_low );
 			memcpy( stage->bundle[0].image,	images,			stage->bundle[0].numImageAnimations * sizeof( image_t* ) );
 		}
-/*
 		else if ( !Q_stricmp( token, "videoMap" ) )
 		{
 			token = COM_ParseExt( text, qfalse );
@@ -1466,34 +1456,7 @@ static qboolean ParseStage( shaderStage_t *stage, const char **text )
 				stage->bundle[0].image = tr.scratchImage[stage->bundle[0].videoMapHandle];
 			}
 		}
-*/
-#ifdef _XBOX
-		//
-		// bumpmap <name>
-		//
-		else if ( !Q_stricmp( token, "bumpmap" ) )
-		{
-			token = COM_ParseExt( text, qfalse );
-			if( !token[0] )
-			{
-				Com_Printf( S_COLOR_YELLOW, "WARNING: missing parameter for 'bumpmap' keyword in shader '%s'\n", shader.name );
-				return qfalse;
-			}
 
-			stage->bundle[0].image = R_FindImageFile( token, !shader.noMipMaps, qfalse, 0, GL_REPEAT );
-			if ( !stage->bundle[0].image )
-			{
-				Com_Printf( S_COLOR_YELLOW, "WARNING: R_FindImageFile could not find '%s' in shader '%s'\n", token, shader.name );
-				return qfalse;
-			}
-
-			stage->isBumpMap = qtrue;
-			shader.isBumpMap = qtrue;
-
-			shader.needsNormal = true;
-			shader.needsTangent = true;
-		}
-#endif
 		//
 		// alphafunc <func>
 		//
@@ -1646,9 +1609,6 @@ static qboolean ParseStage( shaderStage_t *stage, const char **text )
 			{
 				stage->rgbGen = CGEN_LIGHTING_DIFFUSE;
 
-#ifdef _XBOX
-				shader.needsNormal = true;
-#endif
 			}
 			else if ( !Q_stricmp( token, "lightingDiffuseEntity" ) )
 			{
@@ -1658,9 +1618,6 @@ static qboolean ParseStage( shaderStage_t *stage, const char **text )
 				}
 				stage->rgbGen = CGEN_LIGHTING_DIFFUSE_ENTITY;
 
-#ifdef _XBOX
-				shader.needsNormal = true;
-#endif
 			}
 			else if ( !Q_stricmp( token, "oneMinusVertex" ) )
 			{
@@ -1714,9 +1671,6 @@ static qboolean ParseStage( shaderStage_t *stage, const char **text )
 			else if ( !Q_stricmp( token, "lightingSpecular" ) )
 			{
 				stage->alphaGen = AGEN_LIGHTING_SPECULAR;
-#ifdef _XBOX
-				shader.needsNormal = true; 
-#endif
 			}
 			else if ( !Q_stricmp( token, "oneMinusVertex" ) )
 			{
@@ -1765,9 +1719,6 @@ static qboolean ParseStage( shaderStage_t *stage, const char **text )
 			if ( !Q_stricmp( token, "environment" ) )
 			{
 				stage->bundle[0].tcGen = TCGEN_ENVIRONMENT_MAPPED;
-#ifdef _XBOX
-				shader.needsNormal = true;
-#endif
 			}
 			else if ( !Q_stricmp( token, "lightmap" ) )
 			{
@@ -1823,8 +1774,7 @@ static qboolean ParseStage( shaderStage_t *stage, const char **text )
 		// If this stage has glow...	GLOWXXX
 		else if ( Q_stricmp( token, "glow" ) == 0 )
 		{
-			// VVFIXME GLOWXXX
-//			stage->glow = true;
+			stage->glow = true;
 
 			continue;
 		}
@@ -2114,7 +2064,7 @@ static void ParseSkyParms( const char **text ) {
 #ifdef DEDICATED
 			shader.sky->outerbox[i] = NULL;
 #else
-			shader.sky->outerbox[i] = R_FindImageFile( ( char * ) pathname, qtrue, qtrue, qfalse, GL_CLAMP );
+			shader.sky->outerbox[i] = R_FindImageFile( ( char * ) pathname, qtrue, qtrue, (qboolean)!shader.noTC, GL_CLAMP );
 			if ( !shader.sky->outerbox[i] ) {
 				if (i) {
 					shader.sky->outerbox[i] = shader.sky->outerbox[i-1];//not found, so let's use the previous image
@@ -2315,11 +2265,6 @@ static qboolean ParseShader( const char **text )
 
 	s = 0;
 
-#ifdef _XBOX
-	shader.needsNormal = false;
-	shader.needsTangent = false;
-#endif
-
 	token = COM_ParseExt( text, qtrue );
 	if ( token[0] != '{' )
 	{
@@ -2349,12 +2294,10 @@ static qboolean ParseShader( const char **text )
 				return qfalse;
 			}
 			stages[s].active = qtrue;
-#ifndef _XBOX	// GLOWXXX
 			if ( stages[s].glow )
 			{
 				shader.hasGlow = true;
 			}
-#endif
 			s++;
 			continue;
 		}
@@ -2424,11 +2367,10 @@ static qboolean ParseShader( const char **text )
 			continue;
 		}
 		else if ( !Q_stricmp( token, "clampTime" ) ) {
-			assert( 0 );
-//			token = COM_ParseExt( text, qfalse );
-//	      if (token[0]) {
-//		    shader.clampTime = atof(token);
-//		}
+			token = COM_ParseExt( text, qfalse );
+      if (token[0]) {
+        shader.clampTime = atof(token);
+      }
     }
 		// skip stuff that only the q3map needs
 		else if ( !Q_stricmpn( token, "q3map", 5 ) ) {
@@ -2444,13 +2386,13 @@ static qboolean ParseShader( const char **text )
 		else if ( !Q_stricmp( token, "nomipmaps" ) )
 		{
 			shader.noMipMaps = true;
-//			shader.noPicMip = true;
+			shader.noPicMip = true;
 			continue;
 		}
 		// no picmip adjustment
 		else if ( !Q_stricmp( token, "nopicmip" ) )
 		{
-//			shader.noPicMip = true;
+			shader.noPicMip = true;
 			continue;
 		}
 		else if ( !Q_stricmp( token, "noglfog" ) )
@@ -2466,7 +2408,7 @@ static qboolean ParseShader( const char **text )
 		}
 		else if ( !Q_stricmp( token, "noTC" ) )
 		{
-//			shader.noTC = true;
+			shader.noTC = true;
 			continue;
 		}
 		// entityMergable, allowing sprite surfaces from multiple entities
@@ -2724,6 +2666,99 @@ static qboolean CollapseMultitexture( void ) {
 	return qtrue;
 }
 
+/*
+=============
+
+FixRenderCommandList
+https://zerowing.idsoftware.com/bugzilla/show_bug.cgi?id=493
+Arnout: this is a nasty issue. Shaders can be registered after drawsurfaces are generated
+but before the frame is rendered. This will, for the duration of one frame, cause drawsurfaces
+to be rendered with bad shaders. To fix this, need to go through all render commands and fix
+sortedIndex.
+==============
+*/
+extern bool gServerSkinHack;
+static void FixRenderCommandList( int newShader ) {
+#ifndef DEDICATED
+	if( !gServerSkinHack ) {
+		renderCommandList_t	*cmdList = &backEndData->commands;
+
+		if( cmdList ) {
+			const void *curCmd = cmdList->cmds;
+
+			while ( 1 ) {
+				//curCmd = PADP(curCmd, sizeof(void *));
+
+				switch ( *(const int *)curCmd ) {
+				case RC_SET_COLOR:
+					{
+					const setColorCommand_t *sc_cmd = (const setColorCommand_t *)curCmd;
+					curCmd = (const void *)(sc_cmd + 1);
+					break;
+					}
+				case RC_STRETCH_PIC:
+					{
+					const stretchPicCommand_t *sp_cmd = (const stretchPicCommand_t *)curCmd;
+					curCmd = (const void *)(sp_cmd + 1);
+					break;
+					}
+				case RC_ROTATE_PIC:
+					{
+					const rotatePicCommand_t *sp_cmd = (const rotatePicCommand_t *)curCmd;
+					curCmd = (const void *)(sp_cmd + 1);
+					break;
+					}
+				case RC_ROTATE_PIC2:
+					{
+					const rotatePicCommand_t *sp_cmd = (const rotatePicCommand_t *)curCmd;
+					curCmd = (const void *)(sp_cmd + 1);
+					break;
+					}
+				case RC_DRAW_SURFS:
+					{
+					int i;
+					drawSurf_t	*drawSurf;
+					shader_t	*shader;
+					int			fogNum;
+					int			entityNum;
+					int			dlightMap;
+					int			sortedIndex;
+					const drawSurfsCommand_t *ds_cmd =  (const drawSurfsCommand_t *)curCmd;
+
+					for( i = 0, drawSurf = ds_cmd->drawSurfs; i < ds_cmd->numDrawSurfs; i++, drawSurf++ ) {
+						R_DecomposeSort( drawSurf->sort, &entityNum, &shader, &fogNum, &dlightMap );
+						sortedIndex = (( drawSurf->sort >> QSORT_SHADERNUM_SHIFT ) & (MAX_SHADERS-1));
+						if( sortedIndex >= newShader ) {
+							sortedIndex++;
+							drawSurf->sort = (sortedIndex << QSORT_SHADERNUM_SHIFT) | entityNum | ( fogNum << QSORT_FOGNUM_SHIFT ) | (int)dlightMap;
+						}
+					}
+					curCmd = (const void *)(ds_cmd + 1);
+					break;
+					}
+				case RC_DRAW_BUFFER:
+				case RC_WORLD_EFFECTS:
+				case RC_AUTO_MAP:
+					{
+					const drawBufferCommand_t *db_cmd = (const drawBufferCommand_t *)curCmd;
+					curCmd = (const void *)(db_cmd + 1);
+					break;
+					}
+				case RC_SWAP_BUFFERS:
+					{
+					const swapBuffersCommand_t *sb_cmd = (const swapBuffersCommand_t *)curCmd;
+					curCmd = (const void *)(sb_cmd + 1);
+					break;
+					}
+				case RC_END_OF_LIST:
+				default:
+					return;
+				}
+			}
+		}
+	}
+#endif
+}
 
 /*
 ==============
@@ -2751,6 +2786,10 @@ static void SortNewShader( void ) {
 		tr.sortedShaders[i+1] = tr.sortedShaders[i];
 		tr.sortedShaders[i+1]->sortedIndex++;
 	}
+
+	// Arnout: fix rendercommandlist
+	// https://zerowing.idsoftware.com/bugzilla/show_bug.cgi?id=493
+	FixRenderCommandList( i+1 );
 
 	newShader->sortedIndex = i+1;
 	tr.sortedShaders[i+1] = newShader;
@@ -2888,9 +2927,6 @@ static int VertexLightingCollapse( void ) {
 		stages[0].stateBits |= GLS_DEPTHMASK_TRUE;
 		if ( shader.lightmapIndex[0] == LIGHTMAP_NONE ) {
 			stages[0].rgbGen = CGEN_LIGHTING_DIFFUSE;
-#ifdef _XBOX
-			shader.needsNormal = true;
-#endif
 		} else {
 			stages[0].rgbGen = CGEN_EXACT_VERTEX;
 		}
@@ -3244,35 +3280,6 @@ static shader_t *FinishShader( void ) {
 		stage--;
 	}
 
-#ifdef _XBOX
-	for(int i = 0; i < MAX_SHADER_STAGES; i++)
-	{
-		if(stages[i].isBumpMap)
-		{
-			// Bumpmap can't be the first stage
-			assert(i > 0);
-
-			if(stages[i - 1].bundle[1].image)
-			{
-				// Previous stage has already been collapsed
-				stages[i].bundle[1] = stages[i].bundle[0];
-				stages[i].bundle[0] = stages[i - 1].bundle[0];
-			}
-			else
-			{
-				stages[i - 1].bundle[1] = stages[i].bundle[0];
-				stages[i - 1].isBumpMap = qtrue;
-
-				// move down subsequent shaders
-				memmove( &stages[i], &stages[i+1], sizeof( stages[i-1] ) * ( MAX_SHADER_STAGES - 2 ) );
-				memset( &stages[MAX_SHADER_STAGES-1], 0, sizeof( stages[i-1] ) );
-
-				stage--;
-			}
-		}
-	}
-#endif
-
 	if ( shader.lightmapIndex[0] >= 0 && !hasLightmapStage ) 
 	{
 		if (vertexLightmap) 
@@ -3346,14 +3353,7 @@ static const char *FindShaderInShaderText( const char *shadername ) {
 		}
 	}
 
-#ifdef _XBOX
-	// Raven: You might want to look into doing this. I could be crazy, but it seems
-	// IMPOSSIBLE for a shader to be found after this point, as EVERY shader is put
-	// in the hash table in ScanAndLoadShaderFiles()
-	return NULL;
-#endif
-
-	p = shaderText;
+	p = s_shaderText;
 
 	if ( !p ) {
 		return NULL;
@@ -3396,7 +3396,7 @@ shader_t *R_FindShaderByName( const char *name ) {
 		return tr.defaultShader;
 	}
 
-	COM_StripExtension( name, strippedName );
+	COM_StripExtension( name, strippedName, sizeof( strippedName ) );
 
 	hash = generateHashValue(strippedName, FILE_HASH_SIZE);
 
@@ -3418,7 +3418,7 @@ shader_t *R_FindShaderByName( const char *name ) {
 }
 
 
-inline qboolean IsShader(shader_t *sh, const char *name, const short *lightmapIndex, const byte *styles)
+inline qboolean IsShader(shader_t *sh, const char *name, const int *lightmapIndex, const byte *styles)
 {
 	int	i;
 
@@ -3473,7 +3473,7 @@ most world construction surfaces.
 
 ===============
 */
-shader_t *R_FindShader( const char *name, const short *lightmapIndex, const byte *styles, qboolean mipRawImage ) 
+shader_t *R_FindShader( const char *name, const int *lightmapIndex, const byte *styles, qboolean mipRawImage ) 
 {
 	char		strippedName[MAX_QPATH];
 	char		fileName[MAX_QPATH];
@@ -3493,7 +3493,7 @@ shader_t *R_FindShader( const char *name, const short *lightmapIndex, const byte
 		lightmapIndex = lightmapsVertex;
 	}
 
-	COM_StripExtension( name, strippedName );
+	COM_StripExtension( name, strippedName, sizeof( strippedName ) );
 
 	hash = generateHashValue(strippedName, FILE_HASH_SIZE);
 
@@ -3535,7 +3535,7 @@ shader_t *R_FindShader( const char *name, const short *lightmapIndex, const byte
 	// if not defined in the in-memory shader descriptions,
 	// look for a single TGA, BMP, or PCX
 	//
-	COM_StripExtension(name,fileName);
+	COM_StripExtension(name,fileName, sizeof( fileName ));
 #ifdef DEDICATED
 	shader.defaultShader = qtrue;
 	return FinishShader();
@@ -3556,9 +3556,6 @@ shader_t *R_FindShader( const char *name, const short *lightmapIndex, const byte
 		stages[0].active = qtrue;
 		stages[0].rgbGen = CGEN_LIGHTING_DIFFUSE;
 		stages[0].stateBits = GLS_DEFAULT;
-#ifdef _XBOX
-		shader.needsNormal = true;
-#endif
 	} else if ( shader.lightmapIndex[0] == LIGHTMAP_BY_VERTEX ) {
 		// explicit colors at vertexes
 		stages[0].bundle[0].image = image;
@@ -3604,8 +3601,8 @@ shader_t *R_FindShader( const char *name, const short *lightmapIndex, const byte
 	return FinishShader();
 }
 
-void ScanAndLoadShaderFiles( const char *path, bool doHash );
-shader_t *R_FindServerShader( const char *name, const short *lightmapIndex, const byte *styles, qboolean mipRawImage ) 
+static void ScanAndLoadShaderFiles( const char *path );
+shader_t *R_FindServerShader( const char *name, const int *lightmapIndex, const byte *styles, qboolean mipRawImage ) 
 {
 	char		strippedName[MAX_QPATH];
 	int			hash;
@@ -3615,7 +3612,7 @@ shader_t *R_FindServerShader( const char *name, const short *lightmapIndex, cons
 		return tr.defaultShader;
 	}
 
-	COM_StripExtension( name, strippedName );
+	COM_StripExtension( name, strippedName, sizeof( strippedName ) );
 
 	hash = generateHashValue(strippedName, FILE_HASH_SIZE);
 
@@ -3643,7 +3640,7 @@ shader_t *R_FindServerShader( const char *name, const short *lightmapIndex, cons
 	return FinishShader();
 }
 
-qhandle_t RE_RegisterShaderFromImage(const char *name, short *lightmapIndex, byte *styles, image_t *image, qboolean mipRawImage) {
+qhandle_t RE_RegisterShaderFromImage(const char *name, int *lightmapIndex, byte *styles, image_t *image, qboolean mipRawImage) {
 	int			i, hash;
 	shader_t	*sh;
 
@@ -3741,7 +3738,7 @@ This should really only be used for explicit shaders, because there is no
 way to ask for different implicit lighting modes (vertex, lightmap, etc)
 ====================
 */
-qhandle_t RE_RegisterShaderLightMap( const char *name, const short *lightmapIndex, const byte *styles ) 
+qhandle_t RE_RegisterShaderLightMap( const char *name, const int *lightmapIndex, const byte *styles ) 
 {
 	shader_t	*sh;
 
@@ -3940,80 +3937,60 @@ in ascending order on consecutive calls.
 =====================
 */
 #define	MAX_SHADER_FILES	4096
-
-void ScanAndLoadShaderFiles( const char *path, bool doHash )
+static void ScanAndLoadShaderFiles( const char *path )
 {
+	char **shaderFiles;
+	char *buffers[MAX_SHADER_FILES];
 	char *p;
+	int numShaders;
 	int i;
 	char *oldp, *token, *hashMem;
 	int shaderTextHashTableSizes[MAX_SHADERTEXT_HASH], hash, size;
 
-	// Shader text is only read in the first time it's needed! Gah!
-	if( !shaderText )
+	long sum = 0;
+	// scan for shader files
+	shaderFiles = /*ri.*/FS_ListFiles( path, ".shader", &numShaders );
+
+	if ( !shaderFiles || !numShaders )
 	{
-		int numShaders;
-		char **shaderFiles;
-		char *buffers[MAX_SHADER_FILES];
-		int bufferSizes[MAX_SHADER_FILES];	// Optimization
-
-		long sum = 0;
-		// scan for shader files
-		shaderFiles = /*ri.*/FS_ListFiles( path, ".shader", &numShaders );
-
-		if ( !shaderFiles || !numShaders )
-		{
-			Com_Error(ERR_FATAL, "ERROR: no shader files found\n");
-			return;
-		}
-
-		if ( numShaders > MAX_SHADER_FILES ) {
-			numShaders = MAX_SHADER_FILES;
-		}
-
-		// load and parse shader files
-		for ( i = 0; i < numShaders; i++ )
-		{
-			char filename[MAX_QPATH];
-
-			Com_sprintf( filename, sizeof( filename ), "%s/%s", path, shaderFiles[i] );
-			//Com_Printf( "...loading '%s'\n", filename );
-			/*ri.*/FS_ReadFile( filename, (void **)&buffers[i] );
-			if ( !buffers[i] ) {
-				/*ri.*/Com_Error( ERR_DROP, "Couldn't load %s", filename );
-			}
-			sum += (bufferSizes[i] = COM_Compress( buffers[i] ));
-		}
-
-		// free up memory
-		/*ri.*/FS_FreeFileList( shaderFiles );
-
-		// build single large buffer
-//		s_shaderText = (char *)/*ri.*/Hunk_Alloc( sum + numShaders*2, h_low );
-		shaderText = (char *) Z_Malloc( sum + numShaders * 2, TAG_SHADERTEXT, qfalse, 4 );
-
-		// Optimization: reuse sum from here on to count how much data we've appended
-		sum = 0;
-		shaderText[0] = 0;
-
-		// free in reverse order, so the temp files are all dumped
-		for ( i = numShaders - 1; i >= 0 ; i-- ) {
-			strcat( shaderText + sum, "\n" );
-			strcat( shaderText + sum, buffers[i] );
-			/*ri.*/FS_FreeFile( (void*) buffers[i] );
-			// Start next strcat after this one (including \n)
-			sum += (bufferSizes[i] + 1);
-		}
+		Com_Error(ERR_FATAL, "ERROR: no shader files found\n");
+		return;
 	}
 
-	// If we're just calling this function to be sure that the shadertext
-	// doesn't fragment, then don't do anything else!
-	if( !doHash )
-		return;
+	if ( numShaders > MAX_SHADER_FILES ) {
+		numShaders = MAX_SHADER_FILES;
+	}
 
-	// We'll let the renderer re-build the hash tables every time for now. VVFIXME - OPTIMIZE!
+	// load and parse shader files
+	for ( i = 0; i < numShaders; i++ )
+	{
+		char filename[MAX_QPATH];
+
+		Com_sprintf( filename, sizeof( filename ), "%s/%s", path, shaderFiles[i] );
+		//Com_Printf( "...loading '%s'\n", filename );
+		/*ri.*/FS_ReadFile( filename, (void **)&buffers[i] );
+		if ( !buffers[i] ) {
+			/*ri.*/Com_Error( ERR_DROP, "Couldn't load %s", filename );
+		}
+		sum += COM_Compress( buffers[i] );
+	}
+
+	// free up memory
+	/*ri.*/FS_FreeFileList( shaderFiles );
+
+	// build single large buffer
+	s_shaderText = (char *)/*ri.*/Hunk_Alloc( sum + numShaders*2, h_low );
+
+	// free in reverse order, so the temp files are all dumped
+	for ( i = numShaders - 1; i >= 0 ; i-- ) {
+		strcat( s_shaderText, "\n" );
+		strcat( s_shaderText, buffers[i] );
+		/*ri.*/FS_FreeFile( (void*) buffers[i] );
+	}
+
 	Com_Memset(shaderTextHashTableSizes, 0, sizeof(shaderTextHashTableSizes));
 	size = 0;
-	p = shaderText;
+	p = s_shaderText;
 
 	// look for label
 	while ( 1 ) {
@@ -4038,7 +4015,7 @@ void ScanAndLoadShaderFiles( const char *path, bool doHash )
 	}
 
 	Com_Memset(shaderTextHashTableSizes, 0, sizeof(shaderTextHashTableSizes));
-	p = shaderText;
+	p = s_shaderText;
 	// look for label
 	while ( 1 ) {
 		oldp = p;
@@ -4235,7 +4212,6 @@ static void CreateInternalShaders( void ) {
 	shader.defaultShader = qtrue;
 
 	
-#ifndef _XBOX	// GLOWXXX
 	#define GL_PROGRAM_ERROR_STRING_ARB						0x8874
 	#define GL_PROGRAM_ERROR_POSITION_ARB					0x864B
 
@@ -4315,7 +4291,6 @@ static void CreateInternalShaders( void ) {
 		qglGetIntegerv( GL_PROGRAM_ERROR_POSITION_ARB, &iErrPos );
 		assert( iErrPos == -1 );
 	}
-#endif
 }
 
 static void CreateExternalShaders( void ) {
@@ -4343,7 +4318,7 @@ void R_InitShaders(qboolean server)
 	{
 		CreateInternalShaders();
 
-		ScanAndLoadShaderFiles("shaders", true);
+		ScanAndLoadShaderFiles("shaders");
 
 		CreateExternalShaders();
 	}

@@ -1,9 +1,11 @@
 // win_main.c
+//Anything above this #include will be ignored by the compiler
+#include "qcommon/exe_headers.h"
 
-#include "../client/client.h"
-#include "../qcommon/qcommon.h"
-#include "../win32/win_local.h"
-#include "../win32/resource.h"
+#include "client/client.h"
+#include "qcommon/qcommon.h"
+#include "win32/win_local.h"
+#include "win32/resource.h"
 #include <errno.h>
 #include <float.h>
 #include <fcntl.h>
@@ -11,7 +13,7 @@
 #include <direct.h>
 #include <io.h>
 #include <conio.h>
-#include "../qcommon/stringed_ingame.h"
+#include "qcommon/stringed_ingame.h"
 
 #define	CD_BASEDIR	"gamedata\\gamedata"
 #define	CD_EXE		"jamp.exe"
@@ -22,9 +24,6 @@
 
 static char		sys_cmdline[MAX_STRING_CHARS];
 clientStatic_t	cls;
-
-static int	sys_monkeySpank;
-static int	sys_checksum;
 
 
 void *Sys_GetBotAIAPI (void *parms ) {
@@ -49,136 +48,6 @@ qboolean Sys_LowPhysicalMemory() {
 	MEMORYSTATUS stat;
 	GlobalMemoryStatus (&stat);
 	return (stat.dwTotalPhys <= MEM_THRESHOLD) ? qtrue : qfalse;
-}
-
-/*
-==================
-Sys_FunctionCmp
-==================
-*/
-int Sys_FunctionCmp(void *f1, void *f2) {
-
-	int i, j, l;
-	byte func_end[32] = {0xC3, 0x90, 0x90, 0x00};
-	byte *ptr, *ptr2;
-	byte *f1_ptr, *f2_ptr;
-
-	ptr = (byte *) f1;
-	if (*(byte *)ptr == 0xE9) {
-		//Com_Printf("f1 %p1 jmp %d\n", (int *) f1, *(int*)(ptr+1));
-		f1_ptr = (byte*)(((byte*)f1) + (*(int *)(ptr+1)) + 5);
-	}
-	else {
-		f1_ptr = ptr;
-	}
-	//Com_Printf("f1 ptr %p\n", f1_ptr);
-
-	ptr = (byte *) f2;
-	if (*(byte *)ptr == 0xE9) {
-		//Com_Printf("f2 %p jmp %d\n", (int *) f2, *(int*)(ptr+1));
-		f2_ptr = (byte*)(((byte*)f2) + (*(int *)(ptr+1)) + 5);
-	}
-	else {
-		f2_ptr = ptr;
-	}
-	//Com_Printf("f2 ptr %p\n", f2_ptr);
-
-#ifdef _DEBUG
-	sprintf((char *)func_end, "%c%c%c%c%c%c%c", 0x5F, 0x5E, 0x5B, 0x8B, 0xE5, 0x5D, 0xC3);
-#endif
-	for (i = 0; i < 1024; i++) {
-		for (j = 0; func_end[j]; j++) {
-			if (f1_ptr[i+j] != func_end[j])
-				break;
-		}
-		if (!func_end[j]) {
-			break;
-		}
-	}
-#ifdef _DEBUG
-	l = i + 7;
-#else
-	l = i + 2;
-#endif
-	//Com_Printf("function length = %d\n", l);
-
-	for (i = 0; i < l; i++) {
-		// check for a potential function call
-		if (*((byte *) &f1_ptr[i]) == 0xE8) {
-			// get the function pointers in case this really is a function call
-			ptr = (byte *) (((byte *) &f1_ptr[i]) + (*(int *) &f1_ptr[i+1])) + 5;
-			ptr2 = (byte *) (((byte *) &f2_ptr[i]) + (*(int *) &f2_ptr[i+1])) + 5;
-			// if it was a function call and both f1 and f2 call the same function
-			if (ptr == ptr2) {
-				i += 4;
-				continue;
-			}
-		}
-		if (f1_ptr[i] != f2_ptr[i])
-			return qfalse;
-	}
-	return qtrue;
-}
-
-/*
-==================
-Sys_FunctionCheckSum
-==================
-*/
-int Sys_FunctionCheckSum(void *f1) {
-
-	int i, j, l;
-	byte func_end[32] = {0xC3, 0x90, 0x90, 0x00};
-	byte *ptr;
-	byte *f1_ptr;
-
-	ptr = (byte *) f1;
-	if (*(byte *)ptr == 0xE9) {
-		//Com_Printf("f1 %p1 jmp %d\n", (int *) f1, *(int*)(ptr+1));
-		f1_ptr = (byte*)(((byte*)f1) + (*(int *)(ptr+1)) + 5);
-	}
-	else {
-		f1_ptr = ptr;
-	}
-	//Com_Printf("f1 ptr %p\n", f1_ptr);
-
-#ifdef _DEBUG
-	sprintf((char *)func_end, "%c%c%c%c%c%c%c", 0x5F, 0x5E, 0x5B, 0x8B, 0xE5, 0x5D, 0xC3);
-#endif
-	for (i = 0; i < 1024; i++) {
-		for (j = 0; func_end[j]; j++) {
-			if (f1_ptr[i+j] != func_end[j])
-				break;
-		}
-		if (!func_end[j]) {
-			break;
-		}
-	}
-#ifdef _DEBUG
-	l = i + 7;
-#else
-	l = i + 2;
-#endif
-	//Com_Printf("function length = %d\n", l);
-	return Com_BlockChecksum( f1_ptr, l );
-}
-
-/*
-==================
-Sys_MonkeyShouldBeSpanked
-==================
-*/
-int Sys_MonkeyShouldBeSpanked( void ) {
-	return sys_monkeySpank;
-}
-
-
-/*
-==================
-Sys_VerifyCodeChecksum
-==================
-*/
-void Sys_VerifyCodeChecksum( void *codeBase ) {
 }
 
 /*
@@ -385,8 +254,13 @@ void Sys_Print( const char *msg ) {
 Sys_Mkdir
 ==============
 */
-void Sys_Mkdir( const char *path ) {
-	_mkdir (path);
+qboolean Sys_Mkdir( const char *path ) {
+	if( !CreateDirectory( path, NULL ) )
+	{
+		if( GetLastError( ) != ERROR_ALREADY_EXISTS )
+			return qfalse;
+	}
+	return qtrue;
 }
 
 /*
@@ -671,7 +545,7 @@ Return true if the proper CD is in the drive
 */
 qboolean	Sys_CheckCD( void ) {
 #ifdef FINAL_BUILD
-//	return Sys_ScanForCD();
+	return Sys_ScanForCD();
 #else
 	return qtrue;
 #endif
@@ -728,6 +602,49 @@ void Sys_UnloadDll( void *dllHandle ) {
 		Com_Error (ERR_FATAL, "Sys_UnloadDll FreeLibrary failed");
 	}
 }
+//make sure the dll can be opened by the file system, then write the
+//file back out again so it can be loaded is a library. If the read
+//fails then the dll is probably not in the pk3 and we are running
+//a pure server -rww
+bool Sys_UnpackDLL(const char *name)
+{
+	void *data;
+	fileHandle_t f;
+	int len = FS_ReadFile(name, &data);
+	int ck;
+
+	if (len < 1)
+	{ //failed to read the file (out of the pk3 if pure)
+		return false;
+	}
+
+	if (FS_FileIsInPAK(name, &ck) == -1)
+	{ //alright, it isn't in a pk3 anyway, so we don't need to write it.
+		//this is allowable when running non-pure.
+		FS_FreeFile(data);
+		return true;
+	}
+
+	f = FS_FOpenFileWrite( name );
+	if ( !f )
+	{ //can't open for writing? Might be in use.
+		//This is possibly a malicious user attempt to circumvent dll
+		//replacement so we won't allow it.
+		FS_FreeFile(data);
+		return false;
+	}
+
+	if (FS_Write( data, len, f ) < len)
+	{ //Failed to write the full length. Full disk maybe?
+		FS_FreeFile(data);
+		return false;
+	}
+
+	FS_FCloseFile( f );
+	FS_FreeFile(data);
+
+	return true;
+}
 
 /*
 =================
@@ -744,63 +661,45 @@ void * QDECL Sys_LoadDll( const char *name, int (QDECL **entryPoint)(int, ...),
 	HINSTANCE	libHandle;
 	void	(QDECL *dllEntry)( int (QDECL *syscallptr)(int, ...) );
 	char	*basepath;
+	char	*homepath;
 	char	*cdpath;
 	char	*gamedir;
 	char	*fn;
-#ifdef NDEBUG
-	int		timestamp;
-  int   ret;
-#endif
 	char	filename[MAX_QPATH];
 
 	Com_sprintf( filename, sizeof( filename ), "%sx86.dll", name );
 
-#ifdef NDEBUG
-	timestamp = Sys_Milliseconds();
-//	if( ((timestamp - lastWarning) > (5 * 60000)) && !Cvar_VariableIntegerValue( "dedicated" )
-//		&& !Cvar_VariableIntegerValue( "com_blindlyLoadDLLs" ) ) {
-	if (0) {
-		if (FS_FileExists(filename)) {
-			lastWarning = timestamp;
-			ret = MessageBoxEx( NULL, "You are about to load a .DLL executable that\n"
-				  "has not been verified for use with Quake III Arena.\n"
-				  "This type of file can compromise the security of\n"
-				  "your computer.\n\n"
-				  "Select 'OK' if you choose to load it anyway.",
-				  "Security Warning", MB_OKCANCEL | MB_ICONEXCLAMATION | MB_DEFBUTTON2 | MB_TOPMOST | MB_SETFOREGROUND,
-				  MAKELANGID( LANG_NEUTRAL, SUBLANG_DEFAULT ) );
-			if( ret != IDOK ) {
-				return NULL;
+	if (!Sys_UnpackDLL(filename))
+	{
+		return NULL;
+	}
+
+	libHandle = LoadLibrary( filename );
+	if ( !libHandle ) {
+		basepath = Cvar_VariableString( "fs_basepath" );
+		homepath = Cvar_VariableString( "fs_homepath" );
+		cdpath = Cvar_VariableString( "fs_cdpath" );
+		gamedir = Cvar_VariableString( "fs_game" );
+
+		fn = FS_BuildOSPath( basepath, gamedir, filename );
+		libHandle = LoadLibrary( fn );
+
+		if ( !libHandle ) {
+			if( homepath[0] ) {
+				fn = FS_BuildOSPath( homepath, gamedir, filename );
+				libHandle = LoadLibrary( fn );
+			}
+			if ( !libHandle ) {
+				if( cdpath[0] ) {
+					fn = FS_BuildOSPath( cdpath, gamedir, filename );
+					libHandle = LoadLibrary( fn );
+				}
+				if ( !libHandle ) {
+					return NULL;
+				}
 			}
 		}
 	}
-#endif
-
-
-// rjr disable for final release #ifndef NDEBUG
-	libHandle = LoadLibrary( filename );
-	if ( !libHandle ) {
-//#endif
-	basepath = Cvar_VariableString( "fs_basepath" );
-	cdpath = Cvar_VariableString( "fs_cdpath" );
-	gamedir = Cvar_VariableString( "fs_game" );
-
-	fn = FS_BuildOSPath( basepath, gamedir, filename );
-	libHandle = LoadLibrary( fn );
-
-	if ( !libHandle ) {
-		if( cdpath[0] ) {
-			fn = FS_BuildOSPath( cdpath, gamedir, filename );
-			libHandle = LoadLibrary( fn );
-		}
-
-		if ( !libHandle ) {
-			return NULL;
-		}
-	}
-//#ifndef NDEBUG
-	}
-//#endif
 
 	dllEntry = ( void (QDECL *)( int (QDECL *)( int, ... ) ) )GetProcAddress( libHandle, "dllEntry" ); 
 	*entryPoint = (int (QDECL *)(int,...))GetProcAddress( libHandle, "vmMain" );
@@ -1397,9 +1296,6 @@ int main(int argc, char **argv)
 //        return 0;
 //	}
 
-//	sys_checksum = Sys_CodeInMemoryChecksum( hInstance );
-//	Sys_VerifyCodeChecksum( hInstance );
-
 	// merge the command line, this is kinda silly
 	for (len = 1, i = 1; i < argc; i++)
 		len += strlen(argv[i]) + 1;
@@ -1444,12 +1340,6 @@ int main(int argc, char **argv)
 	if ( !com_dedicated->integer && !com_viewlog->integer ) {
 		Sys_ShowConsole( 0, qfalse );
 	}
-
-#ifdef _DEBUG
-	if ( sys_monkeySpank ) {
-		Cvar_Set("cl_trn", "666");
-	}
-#endif
 
     // main game loop
 	while( 1 ) {

@@ -36,6 +36,10 @@
 
 #define SVF_GLASS_BRUSH			0x08000000	// Ent is a glass brush
 
+#define SVF_NO_BASIC_SOUNDS		0x10000000	// No basic sounds
+#define SVF_NO_COMBAT_SOUNDS	0x20000000	// No combat sounds
+#define SVF_NO_EXTRA_SOUNDS		0x40000000	// No extra or jedi sounds
+
 //rww - ghoul2 trace flags
 #define G2TRFLAG_DOGHOULTRACE	0x00000001 //do the ghoul2 trace
 #define G2TRFLAG_HITCORPSES		0x00000002 //will try g2 collision on the ent even if it's EF_DEAD
@@ -414,24 +418,24 @@ typedef enum {
 	BOTLIB_AI_CHARACTERISTIC_BINTEGER,
 	BOTLIB_AI_CHARACTERISTIC_STRING,
 
-//	BOTLIB_AI_ALLOC_CHAT_STATE,
-//	BOTLIB_AI_FREE_CHAT_STATE,
-//	BOTLIB_AI_QUEUE_CONSOLE_MESSAGE,
-//	BOTLIB_AI_REMOVE_CONSOLE_MESSAGE,
-//	BOTLIB_AI_NEXT_CONSOLE_MESSAGE,
-//	BOTLIB_AI_NUM_CONSOLE_MESSAGE,
-//	BOTLIB_AI_INITIAL_CHAT,
-//	BOTLIB_AI_REPLY_CHAT,
-//	BOTLIB_AI_CHAT_LENGTH,
-//	BOTLIB_AI_ENTER_CHAT,
-//	BOTLIB_AI_STRING_CONTAINS,
-//	BOTLIB_AI_FIND_MATCH,
-//	BOTLIB_AI_MATCH_VARIABLE,
-//	BOTLIB_AI_UNIFY_WHITE_SPACES,
-//	BOTLIB_AI_REPLACE_SYNONYMS,
-//	BOTLIB_AI_LOAD_CHAT_FILE,
-//	BOTLIB_AI_SET_CHAT_GENDER,
-//	BOTLIB_AI_SET_CHAT_NAME,
+	BOTLIB_AI_ALLOC_CHAT_STATE,
+	BOTLIB_AI_FREE_CHAT_STATE,
+	BOTLIB_AI_QUEUE_CONSOLE_MESSAGE,
+	BOTLIB_AI_REMOVE_CONSOLE_MESSAGE,
+	BOTLIB_AI_NEXT_CONSOLE_MESSAGE,
+	BOTLIB_AI_NUM_CONSOLE_MESSAGE,
+	BOTLIB_AI_INITIAL_CHAT,
+	BOTLIB_AI_REPLY_CHAT,
+	BOTLIB_AI_CHAT_LENGTH,
+	BOTLIB_AI_ENTER_CHAT,
+	BOTLIB_AI_STRING_CONTAINS,
+	BOTLIB_AI_FIND_MATCH,
+	BOTLIB_AI_MATCH_VARIABLE,
+	BOTLIB_AI_UNIFY_WHITE_SPACES,
+	BOTLIB_AI_REPLACE_SYNONYMS,
+	BOTLIB_AI_LOAD_CHAT_FILE,
+	BOTLIB_AI_SET_CHAT_GENDER,
+	BOTLIB_AI_SET_CHAT_NAME,
 
 	BOTLIB_AI_RESET_GOAL_STATE,
 	BOTLIB_AI_RESET_AVOID_GOALS,
@@ -524,6 +528,7 @@ Ghoul2 Insert Start
 	G_G2_REMOVEGHOUL2MODELS,
 	G_G2_CLEANMODELS,
 	G_G2_COLLISIONDETECT,
+	G_G2_COLLISIONDETECTCACHE,
 
 	G_G2_SETROOTSURFACE,
 	G_G2_SETSURFACEONOFF,
@@ -667,7 +672,9 @@ typedef struct
 
 #define MAX_FAILED_NODES 8
 
+#if !defined(MACOS_X) && !defined(__GCC__)
 typedef struct Vehicle_s Vehicle_t;
+#endif
 
 // the server looks at a sharedEntity, which is the start of the game's gentity_t structure
 //mod authors should not touch this struct
@@ -718,9 +725,9 @@ class CTaskManager;
 extern CSequencer	*gSequencers[MAX_GENTITIES];
 extern CTaskManager	*gTaskManagers[MAX_GENTITIES];
 
-#include "../icarus/icarus.h"
-#include "../icarus/sequencer.h"
-#include "../icarus/taskmanager.h"
+#include "icarus/icarus.h"
+#include "icarus/sequencer.h"
+#include "icarus/taskmanager.h"
 #endif
 
 //

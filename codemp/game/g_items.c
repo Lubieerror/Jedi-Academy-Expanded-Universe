@@ -1,8 +1,8 @@
 // Copyright (C) 1999-2000 Id Software, Inc.
 //
 #include "g_local.h"
-#include "../ghoul2/G2.h"
-#include "q_shared.h"
+#include "ghoul2/G2.h"
+#include "qcommon/q_shared.h"
 
 /*
 
@@ -258,7 +258,7 @@ void CreateShield(gentity_t *ent)
 	int			height, posWidth, negWidth, halfWidth = 0;
 	qboolean	xaxis;
 	int			paramData = 0;
-	static int	shieldID;
+//	static int	shieldID;
 
 	// trace upward to find height of shield
 	VectorCopy(ent->r.currentOrigin, end);
@@ -1442,22 +1442,13 @@ void EWebPrecache(void)
 #define EWEB_DEATH_RADIUS		128
 #define EWEB_DEATH_DMG			90
 
-#include "../namespace_begin.h"
 extern void BG_CycleInven(playerState_t *ps, int direction); //bg_misc.c
-#include "../namespace_end.h"
 
 void EWebDie(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int damage, int mod)
 {
 	vec3_t fxDir;
 
-	static int recursionCount = 0;
-
-	++recursionCount;
-
-	// Hack to prevent E-webs in range of each other from causing stack overflow
-	if( recursionCount < 4 )
-		G_RadiusDamage(self->r.currentOrigin, self, EWEB_DEATH_DMG, EWEB_DEATH_RADIUS, self, self, MOD_SUICIDE);
-
+	G_RadiusDamage(self->r.currentOrigin, self, EWEB_DEATH_DMG, EWEB_DEATH_RADIUS, self, self, MOD_SUICIDE);
 
 	VectorSet(fxDir, 1.0f, 0.0f, 0.0f);
 	G_PlayEffect(EFFECT_EXPLOSION_DETPACK, self->r.currentOrigin, fxDir);
@@ -1485,8 +1476,6 @@ void EWebDie(gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int dam
 			}
 		}
 	}
-
-	--recursionCount;
 }
 
 //e-web pain
@@ -1507,13 +1496,8 @@ void EWebPain(gentity_t *self, gentity_t *attacker, int damage)
 //special routine for tracking angles between client and server
 void EWeb_SetBoneAngles(gentity_t *ent, char *bone, vec3_t angles)
 {
-#ifdef _XBOX
-	byte *thebone = &ent->s.boneIndex1;
-	byte *firstFree = NULL;
-#else
 	int *thebone = &ent->s.boneIndex1;
 	int *firstFree = NULL;
-#endif
 	int i = 0;
 	int boneIndex = G_BoneIndex(bone);
 	int flags, up, right, forward;
@@ -1541,7 +1525,6 @@ void EWeb_SetBoneAngles(gentity_t *ent, char *bone, vec3_t angles)
 			thebone = &ent->s.boneIndex2;
 			boneVector = &ent->s.boneAngles2;
 			break;
-/*
 		case 1:
 			thebone = &ent->s.boneIndex3;
 			boneVector = &ent->s.boneAngles3;
@@ -1550,7 +1533,6 @@ void EWeb_SetBoneAngles(gentity_t *ent, char *bone, vec3_t angles)
 			thebone = &ent->s.boneIndex4;
 			boneVector = &ent->s.boneAngles4;
 			break;
-*/
 		default:
 			thebone = NULL;
 			boneVector = NULL;
@@ -1564,9 +1546,7 @@ void EWeb_SetBoneAngles(gentity_t *ent, char *bone, vec3_t angles)
 	{ //didn't find it, create it
 		if (!firstFree)
 		{ //no free bones.. can't do a thing then.
-#ifndef FINAL_BUILD
 			Com_Printf("WARNING: E-Web has no free bone indexes\n");
-#endif
 			return;
 		}
 
@@ -1782,9 +1762,7 @@ void EWebUpdateBoneAngles(gentity_t *owner, gentity_t *eweb)
 }
 
 //keep it updated
-#include "../namespace_begin.h"
 extern int BG_EmplacedView(vec3_t baseAngles, vec3_t angles, float *newYaw, float constraint); //bg_misc.c
-#include "../namespace_end.h"
 
 void EWebThink(gentity_t *self)
 {
@@ -2045,7 +2023,7 @@ int Pickup_Powerup( gentity_t *ent, gentity_t *other ) {
 		other->client->ps.powerups[ent->item->giTag] = 
 			level.time - ( level.time % 1000 );
 
-//		G_LogWeaponPowerup(other->s.number, ent->item->giTag);
+		G_LogWeaponPowerup(other->s.number, ent->item->giTag);
 	}
 
 	if ( ent->count ) {
@@ -2120,7 +2098,7 @@ int Pickup_Holdable( gentity_t *ent, gentity_t *other ) {
 
 	other->client->ps.stats[STAT_HOLDABLE_ITEMS] |= (1 << ent->item->giTag);
 
-//	G_LogWeaponItem(other->s.number, ent->item->giTag);
+	G_LogWeaponItem(other->s.number, ent->item->giTag);
 
 	return adjustRespawnTime(RESPAWN_HOLDABLE, ent->item->giType, ent->item->giTag);
 }
@@ -2130,12 +2108,19 @@ int Pickup_Holdable( gentity_t *ent, gentity_t *other ) {
 
 void Add_Ammo (gentity_t *ent, int weapon, int count)
 {
-	if ( ent->client->ps.ammo[weapon] < ammoData[weapon].max )
+	int max = ammoData[weapon].max;
+		
+	if (ent->client->ps.eFlags & EF_DOUBLE_AMMO) 
+	{ // fix: double ammo for siege
+		max *= 2;
+	}
+
+	if ( ent->client->ps.ammo[weapon] < max )
 	{
 		ent->client->ps.ammo[weapon] += count;
-		if ( ent->client->ps.ammo[weapon] > ammoData[weapon].max )
+		if ( ent->client->ps.ammo[weapon] > max )
 		{
-			ent->client->ps.ammo[weapon] = ammoData[weapon].max;
+			ent->client->ps.ammo[weapon] = max;
 		}
 	}
 }
@@ -2233,7 +2218,7 @@ int Pickup_Weapon (gentity_t *ent, gentity_t *other) {
 	//Add_Ammo( other, ent->item->giTag, quantity );
 	Add_Ammo( other, weaponData[ent->item->giTag].ammoIndex, quantity );
 
-//	G_LogWeaponPickup(other->s.number, ent->item->giTag);
+	G_LogWeaponPickup(other->s.number, ent->item->giTag);
 	
 	// team deathmatch has slow weapon respawns
 	if ( g_gametype.integer == GT_TEAM ) 
@@ -2702,11 +2687,11 @@ gentity_t *LaunchItem( gitem_t *item, vec3_t origin, vec3_t velocity ) {
 		Team_CheckDroppedItem( dropped );
 
 		//rww - so bots know
-		if (strcmp(dropped->classname, "team_CTF_redflag") == 0)
+		if (dropped->item->giTag == PW_REDFLAG)	
 		{
 			droppedRedFlag = dropped;
-		}
-		else if (strcmp(dropped->classname, "team_CTF_blueflag") == 0)
+		} 
+		else if (dropped->item->giTag == PW_BLUEFLAG)	
 		{
 			droppedBlueFlag = dropped;
 		}
@@ -2931,8 +2916,8 @@ void FinishSpawningItem( gentity_t *ent ) {
 
 		//if it is directly even with the floor it will return startsolid, so raise up by 0.1
 		//and temporarily subtract 0.1 from the z maxs so that going up doesn't push into the ceiling
-		ent->s.origin[2] += 0.1;
-		ent->r.maxs[2] -= 0.1;
+		ent->s.origin[2] += 0.1f;
+		ent->r.maxs[2] -= 0.1f;
 
 		VectorSet( dest, ent->s.origin[0], ent->s.origin[1], ent->s.origin[2] - 4096 );
 		trap_Trace( &tr, ent->s.origin, ent->r.mins, ent->r.maxs, dest, ent->s.number, MASK_SOLID );
@@ -2943,7 +2928,7 @@ void FinishSpawningItem( gentity_t *ent ) {
 		}
 
 		//add the 0.1 back after the trace
-		ent->r.maxs[2] += 0.1;
+		ent->r.maxs[2] += 0.1f;
 
 		// allow to ride movers
 		ent->s.groundEntityNum = tr.entityNum;
@@ -2994,11 +2979,11 @@ void G_CheckTeamItems( void ) {
 		// check for the two flags
 		item = BG_FindItem( "team_CTF_redflag" );
 		if ( !item || !itemRegistered[ item - bg_itemlist ] ) {
-			G_Printf( S_COLOR_YELLOW "WARNING: No team_CTF_redflag in map" );
+			G_Printf( S_COLOR_YELLOW "WARNING: No team_CTF_redflag in map\n" );
 		}
 		item = BG_FindItem( "team_CTF_blueflag" );
 		if ( !item || !itemRegistered[ item - bg_itemlist ] ) {
-			G_Printf( S_COLOR_YELLOW "WARNING: No team_CTF_blueflag in map" );
+			G_Printf( S_COLOR_YELLOW "WARNING: No team_CTF_blueflag in map\n" );
 		}
 	}
 }
@@ -3228,6 +3213,7 @@ void G_RunItem( gentity_t *ent ) {
 	VectorCopy( tr.endpos, ent->r.currentOrigin );
 
 	if ( tr.startsolid ) {
+
 		tr.fraction = 0;
 	}
 

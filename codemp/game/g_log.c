@@ -1,6 +1,6 @@
 #include "g_local.h"
 
-//#define LOGGING_WEAPONS	
+#define LOGGING_WEAPONS	
 
 // Weapon statistic logging.
 // Nothing super-fancy here, I just want to keep track of, per player:
@@ -27,9 +27,6 @@ int G_WeaponLogLastTime[MAX_CLIENTS];
 qboolean G_WeaponLogClientTouch[MAX_CLIENTS];
 int G_WeaponLogPowerups[MAX_CLIENTS][HI_NUM_HOLDABLE];
 int	G_WeaponLogItems[MAX_CLIENTS][PW_NUM_POWERUPS];
-
-extern vmCvar_t	g_statLog;
-extern vmCvar_t	g_statLogFile;
 
 // MOD-weapon mapping array.
 int weaponFromMOD[MOD_MAX] =
@@ -828,7 +825,7 @@ qboolean CalculateEfficiency(gentity_t *ent, int *efficiency)
 	gentity_t	*player = NULL;
 
 
-	for (i = 0; i < g_maxclients.integer; i++)
+	for (i = 0; i < sv_maxclients.integer; i++)
 	{
 		player = g_entities + i;
 		if (!player->inuse)
@@ -875,7 +872,7 @@ qboolean CalculateSharpshooter(gentity_t *ent, int *frags)
 		return qfalse;
 	}
 
-	for (i = 0; i < g_maxclients.integer; i++)
+	for (i = 0; i < sv_maxclients.integer; i++)
 	{
 		nKills = 0;
 		player = g_entities + i;
@@ -907,12 +904,11 @@ qboolean CalculateUntouchable(gentity_t *ent)
 #ifdef LOGGING_WEAPONS
 	int			playTime;
 	playTime = (level.time - ent->client->pers.enterTime)/60000;
-/*
+
 	if ( g_gametype.integer == GT_JEDIMASTER && ent->client->ps.isJediMaster )
 	{//Jedi Master (was Borg queen) can only be killed once anyway
 		return qfalse;
 	}
-*/
 	//------------------------------------------------------ MUST HAVE ACHIEVED 2 KILLS PER MINUTE
 	if ( ((float)ent->client->ps.persistant[PERS_SCORE])/((float)(playTime)) < 2.0  || playTime==0)
 		return qfalse;
@@ -935,7 +931,7 @@ qboolean CalculateLogistics(gentity_t *ent, int *stuffUsed)
 				nDifferent = 0, nMostDifferent = 0;
 	gentity_t	*player = NULL;
 
-	for (i = 0; i < g_maxclients.integer; i++)
+	for (i = 0; i < sv_maxclients.integer; i++)
 	{
 		nStuffUsed = 0;
 		nDifferent = 0;
@@ -999,12 +995,10 @@ qboolean CalculateTactician(gentity_t *ent, int *kills)
 	{//duh, only 1 weapon
 		return qfalse;
 	}
-/*
 	if ( g_gametype.integer == GT_JEDIMASTER && ent->client->ps.isJediMaster )
 	{//Jedi Master (was Borg queen) has only 1 weapon
 		return qfalse;
 	}
-*/
 	//------------------------------------------------------ MUST HAVE ACHIEVED 2 KILLS PER MINUTE
 	if (playTime<0.3)
 		return qfalse;
@@ -1020,7 +1014,7 @@ qboolean CalculateTactician(gentity_t *ent, int *kills)
 	for (weapon = 0; weapon<WP_NUM_WEAPONS; weapon++)
 			wasPickedUpBySomeone[weapon] = 0;				// CLEAR
 
-	for (person=0; person<g_maxclients.integer; person++)
+	for (person=0; person<sv_maxclients.integer; person++)
 	{
 		for (weapon = 0; weapon<WP_NUM_WEAPONS; weapon++)
 		{
@@ -1034,7 +1028,7 @@ qboolean CalculateTactician(gentity_t *ent, int *kills)
 
 
 	//------------------------------------------------------ FOR EVERY PERSON, CHECK FOR CANDIDATE
-	for (person=0; person<g_maxclients.integer; person++)
+	for (person=0; person<sv_maxclients.integer; person++)
 	{
 		player = g_entities + person;
 		if (!player->inuse)			continue;
@@ -1093,7 +1087,7 @@ qboolean CalculateDemolitionist(gentity_t *ent, int *kills)
 				playTime = (level.time - ent->client->pers.enterTime)/60000;
 	gentity_t	*player = NULL;
 
-	for (i = 0; i < g_maxclients.integer; i++)
+	for (i = 0; i < sv_maxclients.integer; i++)
 	{
 		nKills = 0;
 		player = g_entities + i;
@@ -1165,7 +1159,7 @@ qboolean CalculateTeamMVP(gentity_t *ent)
 				team = ent->client->ps.persistant[PERS_TEAM];
 	gentity_t	*player = NULL;
 
-	for (i = 0; i < g_maxclients.integer; i++)
+	for (i = 0; i < sv_maxclients.integer; i++)
 	{
 		nScore = 0;
 		player = g_entities + i;
@@ -1210,7 +1204,7 @@ qboolean CalculateTeamMVPByRank(gentity_t *ent)
 	}
 	*/
 
-	for (i = 0; i < g_maxclients.integer; i++)
+	for (i = 0; i < sv_maxclients.integer; i++)
 	{
 		nScore = 0;
 		player = g_entities + i;
@@ -1253,7 +1247,7 @@ qboolean CalculateTeamDefender(gentity_t *ent)
 		return qfalse;
 	}
 	*/
-	for (i = 0; i < g_maxclients.integer; i++)
+	for (i = 0; i < sv_maxclients.integer; i++)
 	{
 		nScore = 0;
 		player = g_entities + i;
@@ -1289,7 +1283,7 @@ qboolean CalculateTeamWarrior(gentity_t *ent)
 		return qfalse;
 	}
 	*/
-	for (i = 0; i < g_maxclients.integer; i++)
+	for (i = 0; i < sv_maxclients.integer; i++)
 	{
 		nScore = 0;
 		player = g_entities + i;
@@ -1325,7 +1319,7 @@ qboolean CalculateTeamCarrier(gentity_t *ent)
 		return qfalse;
 	}
 	*/
-	for (i = 0; i < g_maxclients.integer; i++)
+	for (i = 0; i < sv_maxclients.integer; i++)
 	{
 		nScore = 0;
 		player = g_entities + i;
@@ -1362,7 +1356,7 @@ qboolean CalculateTeamInterceptor(gentity_t *ent)
 		return qfalse;
 	}
 	*/
-	for (i = 0; i < g_maxclients.integer; i++)
+	for (i = 0; i < sv_maxclients.integer; i++)
 	{
 		nScore = 0;
 		player = g_entities + i;
@@ -1400,7 +1394,7 @@ qboolean CalculateTeamRedShirt(gentity_t *ent)
 		return qfalse;
 	}
 	*/
-	for (i = 0; i < g_maxclients.integer; i++)
+	for (i = 0; i < sv_maxclients.integer; i++)
 	{
 		nScore = 0;
 		player = g_entities + i;
@@ -1490,7 +1484,7 @@ qboolean CalculateSection31Award(gentity_t *ent)
 	int			i = 0, frags = 0, efficiency = 0;
 	gentity_t	*player = NULL;
 
-	for (i = 0; i < g_maxclients.integer; i++)
+	for (i = 0; i < sv_maxclients.integer; i++)
 	{
 		player = g_entities + i;
 		if (!player->inuse)
@@ -1590,7 +1584,6 @@ void CalculateAwards(gentity_t *ent, char *msg)
 
 int GetMaxDeathsForClient(int nClient)
 {
-#ifdef LOGGING_WEAPONS
 	int i = 0, nMostDeaths = 0;
 
 	if ((nClient < 0) || (nClient >= MAX_CLIENTS))
@@ -1605,14 +1598,10 @@ int GetMaxDeathsForClient(int nClient)
 		}
 	}
 	return nMostDeaths;
-#else
-	return 0;
-#endif
 }
 
 int GetMaxKillsForClient(int nClient)
 {
-#ifdef LOGGING_WEAPONS
 	int i = 0, nMostKills = 0;
 
 	if ((nClient < 0) || (nClient >= MAX_CLIENTS))
@@ -1627,14 +1616,10 @@ int GetMaxKillsForClient(int nClient)
 		}
 	}
 	return nMostKills;
-#else
-	return 0;
-#endif
 }
 
 int GetFavoriteTargetForClient(int nClient)
 {
-#ifdef LOGGING_WEAPONS
 	int i = 0, nMostKills = 0, nFavoriteTarget = -1;
 
 	if ((nClient < 0) || (nClient >= MAX_CLIENTS))
@@ -1650,14 +1635,10 @@ int GetFavoriteTargetForClient(int nClient)
 		}
 	}
 	return nFavoriteTarget;
-#else
-	return 0;
-#endif
 }
 
 int GetWorstEnemyForClient(int nClient)
 {
-#ifdef LOGGING_WEAPONS
 	int i = 0, nMostDeaths = 0, nWorstEnemy = -1;
 
 	if ((nClient < 0) || (nClient >= MAX_CLIENTS))
@@ -1678,14 +1659,10 @@ int GetWorstEnemyForClient(int nClient)
 		}
 	}
 	return nWorstEnemy;
-#else
-	return 0;
-#endif
 }
 
 int GetFavoriteWeaponForClient(int nClient)
 {
-#ifdef LOGGING_WEAPONS
 	int i = 0, nMostKills = 0, fav=0, weapon=WP_STUN_BATON;
 	int	killsWithWeapon[WP_NUM_WEAPONS];
 
@@ -1718,15 +1695,11 @@ int GetFavoriteWeaponForClient(int nClient)
 		}
 	}
 	return fav;
-#else
-	return 0;
-#endif
 }
 
 // kef -- if a client leaves the game, clear out all counters he may have set
 void QDECL G_ClearClientLog(int client)
 {
-#ifdef LOGGING_WEAPONS
 	int i = 0;
 
 	for (i = 0; i < WP_NUM_WEAPONS; i++)
@@ -1771,6 +1744,5 @@ void QDECL G_ClearClientLog(int client)
 	{
 		G_WeaponLogItems[client][i] = 0;
 	}
-#endif
 }
 

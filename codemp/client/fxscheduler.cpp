@@ -1,5 +1,5 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 #include "client.h"
 
@@ -8,17 +8,12 @@
 #endif
 
 #if !defined(G2_H_INC)
-	#include "../ghoul2/G2.h"
-	#include "../ghoul2/G2_local.h"
+	#include "ghoul2/G2.h"
+	#include "ghoul2/G2_local.h"
 #endif
 
 #if !defined(__Q_SHARED_H)
-	#include "../game/q_shared.h"
-#endif
-
-#ifdef _XBOX
-#include "../cgame/cg_local.h"
-#include "../client/cl_data.h"
+	#include "qcommon/q_shared.h"
 #endif
 
 CFxScheduler	theFxScheduler;
@@ -96,7 +91,7 @@ void CFxScheduler::StopEffect( const char *file, int boltInfo, bool isPortal )
 	char	sfile[MAX_QPATH];
 
 	// Get an extenstion stripped version of the file
-	COM_StripExtension( file, sfile );
+	COM_StripExtension( file, sfile, sizeof( sfile ) );
 	const int id = mEffectIDs[sfile];
 #ifndef FINAL_BUILD
 	if ( id == 0 )
@@ -132,7 +127,7 @@ void CFxScheduler::AddLoopedEffects()
 		{
 			const int entNum = ( mLoopedEffectArray[i].mBoltInfo >> ENTITY_SHIFT )	& ENTITY_AND;
 			// Find out where the entity currently is
-			TCGVectorData	*data = (TCGVectorData*)cl->mSharedMemory;
+			TCGVectorData	*data = (TCGVectorData*)cl.mSharedMemory;
 
 			data->mEntityNum = entNum;
 			VM_Call( cgvm, CG_GET_LERP_ORIGIN );
@@ -266,7 +261,7 @@ int CFxScheduler::RegisterEffect( const char *file, bool bHasCorrectPath /*= fal
 
 	char sfile[MAX_QPATH];
 
-	COM_StripExtension( file, sfile );
+	COM_StripExtension( file, sfile, sizeof( sfile ) );
 	strlwr(sfile);
 
 	Com_DPrintf("Registering effect : %s\n", sfile);
@@ -284,7 +279,7 @@ int CFxScheduler::RegisterEffect( const char *file, bool bHasCorrectPath /*= fal
 	CGenericParser2	parser;
 	int				len = 0;
 	fileHandle_t	fh;
-	//char			data[65536];
+	char			data[65536];
 	char			*bufParse = 0;
 
 	// if our file doesn't have an extension, add one
@@ -336,16 +331,12 @@ int CFxScheduler::RegisterEffect( const char *file, bool bHasCorrectPath /*= fal
 		return 0;
 	}
 
-	char *data = (char *) Z_Malloc( len+1, TAG_TEMP_WORKSPACE, qfalse, 4 );
-
 	// If we'll overflow our buffer, bail out--not a particularly elegant solution
-/*
 	if (len >= sizeof(data) - 1 )
 	{
 		theFxHelper.CloseFile( fh );
 		return 0;
 	}
-*/
 
 	// Get the goods and ensure Null termination
 	theFxHelper.ReadFile( data, len, fh );
@@ -358,9 +349,7 @@ int CFxScheduler::RegisterEffect( const char *file, bool bHasCorrectPath /*= fal
 	theFxHelper.CloseFile( fh );
 
 	// Lets convert the effect file into something that we can work with
-	int retVal = ParseEffect( sfile, parser.GetBaseParseGroup() );
-	Z_Free(data);
-	return retVal;
+	return ParseEffect( sfile, parser.GetBaseParseGroup() );
 }
 
 
@@ -766,7 +755,7 @@ void CFxScheduler::PlayEffect( const char *file, vec3_t origin, vec3_t axis[3], 
 	char	sfile[MAX_QPATH];
 
 	// Get an extenstion stripped version of the file
-	COM_StripExtension( file, sfile );
+	COM_StripExtension( file, sfile, sizeof( sfile ) );
 
 #ifndef FINAL_BUILD
 	if ( mEffectIDs[sfile] == 0 )
@@ -877,24 +866,11 @@ void CFxScheduler::PlayEffect( int id, vec3_t origin, vec3_t axis[3], const int 
 
 		if ( prim->mCullRange )
 		{
-#ifdef _XBOX
-			if(ClientManager::splitScreenMode == qtrue) {
-				if ( DistanceSquared( origin, cg->refdef.vieworg ) > prim->mCullRange ) // cullrange gets squared on load
-				{
-					// is too far away
-					continue;
-				}
-			}
-			else {
-#endif
 			if ( DistanceSquared( origin, theFxHelper.refdef->vieworg ) > prim->mCullRange ) // cullrange gets squared on load
 			{
 				// is too far away
 				continue;
 			}
-#ifdef _XBOX
-			}
-#endif
 		}
 
 		// Scale the particles based on the countscale factor.  Never, ever scale the particles upwards, however.
@@ -950,7 +926,7 @@ void CFxScheduler::PlayEffect( int id, vec3_t origin, vec3_t axis[3], const int 
 				if ( boltInfo == -1 && entityNum != -1 )
 				{
 					// Find out where the entity currently is
-					TCGVectorData	*data = (TCGVectorData*)cl->mSharedMemory;
+					TCGVectorData	*data = (TCGVectorData*)cl.mSharedMemory;
 
 					data->mEntityNum = entityNum;
 					VM_Call( cgvm, CG_GET_LERP_ORIGIN );
@@ -1068,7 +1044,7 @@ void CFxScheduler::PlayEffect( const char *file, vec3_t origin, vec3_t forward, 
 	char	sfile[MAX_QPATH];
 
 	// Get an extenstion stripped version of the file
-	COM_StripExtension( file, sfile );
+	COM_StripExtension( file, sfile, sizeof( sfile ) );
 
 	PlayEffect( mEffectIDs[sfile], origin, forward, vol, rad );
 }
@@ -1122,7 +1098,7 @@ void CFxScheduler::AddScheduledEffects( bool portal )
 					if ( (*itr)->mEntNum != ENTITYNUM_NONE )
 					{
 						// Find out where the entity currently is
-						TCGVectorData	*data = (TCGVectorData*)cl->mSharedMemory;
+						TCGVectorData	*data = (TCGVectorData*)cl.mSharedMemory;
 
 						data->mEntityNum = (*itr)->mEntNum;
 						VM_Call( cgvm, CG_GET_LERP_ORIGIN );

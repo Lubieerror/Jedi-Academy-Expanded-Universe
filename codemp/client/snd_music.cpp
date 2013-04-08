@@ -3,36 +3,27 @@
 //  Stuff to parse in special x-fade music format and handle blending etc
 
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 
-#include "../game/q_shared.h"
-#include "../qcommon/sstring.h"
+#include "qcommon/q_shared.h"
+#include "qcommon/sstring.h"
 
 #pragma warning ( disable : 4663 )	//spcialize class
 #pragma warning( push, 3 )
 #include <algorithm>
 #pragma warning (pop)
 
-#ifdef _XBOX
-#include "snd_local_console.h"
-#include <xtl.h>
-#else
 #include "snd_local.h"
 //#include "snd_mp3.h"
-#endif
 
 //
 #include "snd_music.h"
 #include "snd_ambient.h"
 
-#include "../qcommon/GenericParser2.h"
+#include "qcommon/GenericParser2.h"
 
 extern sboolean S_FileExists( const char *psFilename );
-
-#ifdef _XBOX
-extern void Z_SetNewDeleteTemporary(bool bTemp);
-#endif
 
 #define sKEY_MUSICFILES	"musicfiles"
 #define sKEY_ENTRY		"entry"
@@ -185,13 +176,7 @@ static sboolean Music_ParseMusic(CGenericParser2 &Parser, MusicData_t *MusicData
 {
 	sboolean bReturn = qfalse;
 
-#ifdef _XBOX
-	Z_SetNewDeleteTemporary(true);
-#endif
 	MusicFile_t MusicFile;
-#ifdef _XBOX
-	Z_SetNewDeleteTemporary(false);
-#endif
 
 	CGPGroup *pgMusicFile = pgMusicFiles->FindSubGroup(psMusicName);
 	if (pgMusicFile)
@@ -275,24 +260,12 @@ static sboolean Music_ParseMusic(CGenericParser2 &Parser, MusicData_t *MusicData
 						}
 						if (!bTooCloseToEntryPoint)
 						{
-#ifdef _XBOX
-							Z_SetNewDeleteTemporary(true);
-#endif
 							MusicFile.MusicExitTimes.push_back(MusicExitTime);
-#ifdef _XBOX
-							Z_SetNewDeleteTemporary(false);
-#endif
 						}
 					}
 				}
 
-#ifdef _XBOX
-				Z_SetNewDeleteTemporary(true);
-#endif
 				MusicFile.MusicExitPoints.push_back(MusicExitPoint);
-#ifdef _XBOX
-				Z_SetNewDeleteTemporary(false);
-#endif
 				int iNumExitPoints = MusicFile.MusicExitPoints.size();
 
 				// error checking...
@@ -367,9 +340,6 @@ static sboolean Music_ParseMusic(CGenericParser2 &Parser, MusicData_t *MusicData
 //
 static char *StripTrailingWhiteSpaceOnEveryLine(char *pText)
 {
-#ifdef _XBOX
-	Z_SetNewDeleteTemporary(true);
-#endif
 	string strNewText;
 
 	while (*pText)
@@ -415,9 +385,6 @@ static char *StripTrailingWhiteSpaceOnEveryLine(char *pText)
 
 	char  *pNewText = (char *) Z_Malloc( strlen(strNewText.c_str())+1, TAG_TEMP_WORKSPACE, qfalse);
 	strcpy(pNewText, strNewText.c_str());
-#ifdef _XBOX
-	Z_SetNewDeleteTemporary(false);
-#endif
 	return pNewText;
 }
 

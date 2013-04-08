@@ -1,14 +1,8 @@
 #include "bg_saga.h"
 
-#define DEFAULT_FORCEPOWERS		"5-1-000000000000000000"
-
 //#define FORCEJUMP_INSTANTMETHOD 1
 
-#ifdef _XBOX	// No bot has more than 150 bytes of chat right now
-#define MAX_CHAT_BUFFER_SIZE 256
-#else
 #define MAX_CHAT_BUFFER_SIZE 8192
-#endif
 #define MAX_CHAT_LINE_SIZE 128
 
 #define TABLE_BRANCH_DISTANCE 32
@@ -118,13 +112,8 @@ typedef struct nodeobject_s
 //	int index;
 	float weight;
 	int flags;
-#ifdef _XBOX
-	short	neighbornum;
-	short	inuse;
-#else
 	int neighbornum;
 	int inuse;
-#endif
 } nodeobject_t;
 
 typedef struct boteventtracker_s
@@ -248,7 +237,7 @@ typedef struct bot_state_s
 	int					randomNav;
 
 	int					saberSpecialist;
-/*
+
 	int					canChat;
 	int					chatFrequency;
 	char				currentChat[MAX_CHAT_LINE_SIZE];
@@ -258,7 +247,7 @@ typedef struct bot_state_s
 	int					chatTeam;
 	gentity_t			*chatObject;
 	gentity_t			*chatAltObject;
-*/
+
 	float				meleeStrafeTime;
 	int					meleeStrafeDir;
 	float				meleeStrafeDisable;
@@ -388,21 +377,17 @@ extern wpobject_t *oFlagBlue;
 extern gentity_t *eFlagRed;
 extern gentity_t *eFlagBlue;
 
-//extern char gBotChatBuffer[MAX_CLIENTS][MAX_CHAT_BUFFER_SIZE];
+extern char gBotChatBuffer[MAX_CLIENTS][MAX_CHAT_BUFFER_SIZE];
 extern float gWPRenderTime;
 extern float gDeactivated;
 extern float gBotEdit;
 extern int gWPRenderedFrame;
 
-#include "../namespace_begin.h"
 extern wpobject_t *gWPArray[MAX_WPARRAY_SIZE];
 extern int gWPNum;
-#include "../namespace_end.h"
 
 extern int gLastPrintedIndex;
-#ifndef _XBOX
 extern nodeobject_t nodetable[MAX_NODETABLE_SIZE];
-#endif
 extern int nodenum;
 
 extern int gLevelFlags;

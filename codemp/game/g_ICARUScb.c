@@ -4,18 +4,17 @@
 //
 //====================================================================================
 
-#include "q_shared.h"
+#include "qcommon/q_shared.h"
 #include "bg_public.h"
 #include "b_local.h"
-#include "../icarus/Q3_Interface.h"
-#include "../icarus/Q3_Registers.h"
+#include "icarus/Q3_Interface.h"
+#include "icarus/Q3_Registers.h"
 #include "g_nav.h"
 
-#include "../namespace_begin.h"
 qboolean BG_SabersOff( playerState_t *ps );
-#include "../namespace_end.h"
-
+extern stringID_table_t WPTable[];
 extern stringID_table_t BSTable[];
+
 
 //This is a hack I guess. It's because we can't include the file this enum is in
 //unless we're using cpp. But we need it for the interpreter stuff.
@@ -25,8 +24,7 @@ extern stringID_table_t BSTable[];
 // This code is compiled as C++ on Xbox. We could try and rig something above
 // so that we only get the C version of the includes (no full Icarus) in that
 // scenario, but I think we'll just try to leave this out instead.
-#ifndef _XBOX
-#ifndef __linux__
+#if defined(__linux__) && defined(__GCC__) || !defined(__linux__)
 enum
 {
 	TK_EOF = -1,
@@ -42,9 +40,8 @@ enum
 	TK_USERDEF,
 };
 #endif
-#endif
 
-#include "../icarus/interpreter.h"
+#include "icarus/interpreter.h"
 
 extern stringID_table_t animTable [MAX_ANIMATIONS+1];
 
@@ -263,7 +260,7 @@ stringID_table_t setTable[] =
 	ENUM2STRING(SET_HUD),
 
 //FIXME: add BOTH_ attributes here too
-	"",	SET_,
+	{"",	SET_},
 };
 
 void Q3_TaskIDClear( int *taskID )
@@ -274,16 +271,16 @@ void Q3_TaskIDClear( int *taskID )
 void G_DebugPrint( int level, const char *format, ... )
 {
 	va_list		argptr;
-	char		text[1024];
+	char		text[1024] = {0};
 
 	//Don't print messages they don't want to see
 	//if ( g_ICARUSDebug->integer < level )
-	if (g_developer.integer != 2)
+	if (developer.integer != 2)
 		return;
 
-	va_start (argptr, format);
-	vsprintf (text, format, argptr);
-	va_end (argptr);
+	va_start( argptr, format );
+	Q_vsnprintf(text, sizeof( text ), format, argptr );
+	va_end( argptr );
 
 	//Add the color formatting
 	switch ( level )
@@ -409,7 +406,7 @@ int Q3_PlaySound( int taskID, int entID, const char *name, const char *channel )
 	Q_strupr(finalName);
 	//G_AddSexToMunroString( finalName, qtrue );
 
-	COM_StripExtension( (const char *)finalName, finalName );
+	COM_StripExtension( (const char *)finalName, finalName, sizeof( finalName ) );
 
 	soundHandle = G_SoundIndex( (char *) finalName );
 	bBroadcast = qfalse;
@@ -946,9 +943,6 @@ Gets the value of a tag by the give name
 */
 int	Q3_GetTag( int entID, const char *name, int lookup, vec3_t info )
 {
-	assert( 0 );
-	return 0;
-/*
 	gentity_t	*ent = &g_entities[entID];
 
 	if (!ent->inuse)
@@ -969,7 +963,6 @@ int	Q3_GetTag( int entID, const char *name, int lookup, vec3_t info )
 	}
 
 	return 0;
-*/
 }
 
 //-----------------------------------------------
@@ -2143,6 +2136,185 @@ static void Q3_SetOriginOffset( int entID, int axis, float offset )
 }
 
 /*
+=============
+Q3_SetEnemy
+
+Sets the enemy of an entity
+=============
+*/
+static void Q3_SetEnemy( int entID, const char *name )
+{
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetEnemy: invalid entID %d\n", entID);
+		return;
+	}
+
+	if( !Q_stricmp("NONE", name) || !Q_stricmp("NULL", name))
+	{
+		if(ent->NPC)
+		{
+			G_ClearEnemy(ent);
+		}
+		else
+		{
+			ent->enemy = NULL;
+		}
+	}
+	else
+	{
+		gentity_t	*enemy = G_Find( NULL, FOFS(targetname), (char *) name);
+
+		if(enemy == NULL)
+		{
+			G_DebugPrint( WL_ERROR, "Q3_SetEnemy: no such enemy: '%s'\n", name );
+			return;
+		}
+		/*else if(enemy->health <= 0)
+		{
+			//G_DebugPrint( WL_ERROR, "Q3_SetEnemy: ERROR - desired enemy has health %d\n", enemy->health );
+			return;
+		}*/
+		else
+		{
+			if(ent->NPC)
+			{
+				G_SetEnemy( ent, enemy );
+				ent->cantHitEnemyCounter = 0;
+			}
+			else
+			{
+				G_SetEnemy(ent, enemy);
+			}
+		}
+	}
+}
+
+
+/*
+=============
+Q3_SetLeader
+
+Sets the leader of an NPC
+=============
+*/
+static void Q3_SetLeader( int entID, const char *name )
+{
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetLeader: invalid entID %d\n", entID);
+		return;
+	}
+
+	if ( !ent->client )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetLeader: ent %d is NOT a player or NPC!\n", entID);
+		return;
+	}
+
+	if( !Q_stricmp("NONE", name) || !Q_stricmp("NULL", name))
+	{
+		ent->client->leader = NULL;
+	}
+	else
+	{
+		gentity_t	*leader = G_Find( NULL, FOFS(targetname), (char *) name);
+
+		if(leader == NULL)
+		{
+			//G_DebugPrint( WL_ERROR,"Q3_SetEnemy: unable to locate enemy: '%s'\n", name );
+			return;
+		}
+		else if(leader->health <= 0)
+		{
+			//G_DebugPrint( WL_ERROR,"Q3_SetEnemy: ERROR - desired enemy has health %d\n", enemy->health );
+			return;
+		}
+		else
+		{
+			ent->client->leader = leader;
+		}
+	}
+}
+
+/*
+=============
+Q3_SetNavGoal
+
+Sets the navigational goal of an entity
+=============
+*/
+static qboolean Q3_SetNavGoal( int entID, const char *name )
+{
+	gentity_t	*ent  = &g_entities[ entID ];
+	vec3_t		goalPos;
+
+	if ( !ent->health )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetNavGoal: tried to set a navgoal (\"%s\") on a corpse! \"%s\"\n", name, ent->script_targetname );
+		return qfalse;
+	}
+	if ( !ent->NPC )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetNavGoal: tried to set a navgoal (\"%s\") on a non-NPC: \"%s\"\n", name, ent->script_targetname );
+		return qfalse;
+	}
+	if ( !ent->NPC->tempGoal )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetNavGoal: tried to set a navgoal (\"%s\") on a dead NPC: \"%s\"\n", name, ent->script_targetname );
+		return qfalse;
+	}
+	if ( !ent->NPC->tempGoal->inuse )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetNavGoal: NPC's (\"%s\") navgoal is freed: \"%s\"\n", name, ent->script_targetname );
+		return qfalse;
+	}
+	if( Q_stricmp( "null", name) == 0
+		|| Q_stricmp( "NULL", name) == 0 )
+	{
+		ent->NPC->goalEntity = NULL;
+		trap_ICARUS_TaskIDComplete( ent, TID_MOVE_NAV );
+		return qfalse;
+	}
+	else
+	{
+		//Get the position of the goal
+		if ( TAG_GetOrigin2( NULL, name, goalPos ) == qfalse )
+		{
+			gentity_t	*targ = G_Find(NULL, FOFS(targetname), (char*)name);
+			if ( !targ )
+			{
+				G_DebugPrint( WL_ERROR, "Q3_SetNavGoal: can't find NAVGOAL \"%s\"\n", name );
+				return qfalse;
+			}
+			else
+			{
+				ent->NPC->goalEntity = targ;
+				ent->NPC->goalRadius = sqrt(ent->r.maxs[0]+ent->r.maxs[0]) + sqrt(targ->r.maxs[0]+targ->r.maxs[0]);
+				ent->NPC->aiFlags &= ~NPCAI_TOUCHED_GOAL;
+			}
+		}
+		else
+		{
+			int	goalRadius = TAG_GetRadius( NULL, name );
+			NPC_SetMoveGoal( ent, goalPos, goalRadius, qtrue, -1, NULL );
+			//We know we want to clear the lastWaypoint here
+			ent->NPC->goalEntity->lastWaypoint = WAYPOINT_NONE;
+			ent->NPC->aiFlags &= ~NPCAI_TOUCHED_GOAL;
+	#ifdef _DEBUG
+			//this is *only* for debugging navigation
+			ent->NPC->tempGoal->target = G_NewString( name );
+	#endif// _DEBUG
+		return qtrue;
+		}
+	}
+	return qfalse;
+}
+/*
 ============
 SetLowerAnim
   Description	: 
@@ -2924,9 +3096,14 @@ Q3_SetWeapon
   Argument		: const char *wp_name
 ============
 */
+extern void ChangeWeapon( gentity_t *ent, int newWeapon );
 static void Q3_SetWeapon (int entID, const char *wp_name)
 {
-	G_DebugPrint( WL_WARNING, "Q3_SetWeapon currently unsupported in MP, ask if you need it.\n");
+	gentity_t	*ent  = &g_entities[entID];
+	int		wp = GetIDForString( WPTable, wp_name );
+
+	ent->client->ps.stats[STAT_WEAPONS] = (1<<wp);
+	ChangeWeapon( ent, wp );
 }
 
 /*
@@ -2957,8 +3134,26 @@ Q3_SetWalkSpeed
 */
 static void Q3_SetWalkSpeed (int entID, int int_data)
 {
-	G_DebugPrint( WL_WARNING, "Q3_SetWalkSpeed: NOT SUPPORTED IN MP\n");
-	return;
+	gentity_t	*self  = &g_entities[entID];
+
+	if ( !self )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetWalkSpeed: invalid entID %d\n", entID);
+		return;
+	}
+	
+	if ( !self->NPC )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetWalkSpeed: '%s' is not an NPC!\n", self->targetname );
+		return;
+	}
+
+	if(int_data == 0)
+	{
+		self->NPC->stats.walkSpeed = self->client->ps.speed = 1;
+	}
+
+	self->NPC->stats.walkSpeed = self->client->ps.speed = int_data;
 }
 
 
@@ -2973,8 +3168,26 @@ Q3_SetRunSpeed
 */
 static void Q3_SetRunSpeed (int entID, int int_data)
 {
-	G_DebugPrint( WL_WARNING, "Q3_SetRunSpeed: NOT SUPPORTED IN MP\n");
-	return;
+	gentity_t	*self  = &g_entities[entID];
+
+	if ( !self )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetRunSpeed: invalid entID %d\n", entID);
+		return;
+	}
+	
+	if ( !self->NPC )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetRunSpeed: '%s' is not an NPC!\n", self->targetname );
+		return;
+	}
+
+	if(int_data == 0)
+	{
+		self->NPC->stats.runSpeed = self->client->ps.speed = 1;
+	}
+
+	self->NPC->stats.runSpeed = self->client->ps.speed = int_data;
 }
 
 
@@ -3710,7 +3923,28 @@ Q3_SetWalking
 */
 static void Q3_SetWalking( int entID, qboolean add)
 {
-	G_DebugPrint( WL_WARNING, "Q3_SetWalking: NOT SUPPORTED IN MP\n");
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetWalking: invalid entID %d\n", entID);
+		return;
+	}
+
+	if ( !ent->NPC )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetWalking: '%s' is not an NPC!\n", ent->targetname );
+		return;
+	}
+
+	if(add)
+	{
+		ent->NPC->scriptFlags |= SCF_WALKING;
+	}
+	else
+	{
+		ent->NPC->scriptFlags &= ~SCF_WALKING;
+	}
 	return;
 }
 
@@ -3984,8 +4218,28 @@ Q3_SetNoAvoid
 */
 static void Q3_SetNoAvoid( int entID, qboolean noAvoid)
 {
-	G_DebugPrint( WL_WARNING, "Q3_SetNoAvoid: NOT SUPPORTED IN MP\n");
-	return;
+	gentity_t	*ent  = &g_entities[entID];
+
+	if ( !ent )
+	{
+		G_DebugPrint( WL_WARNING, "Q3_SetNoAvoid: invalid entID %d\n", entID);
+		return;
+	}
+
+	if ( !ent->NPC )
+	{
+		G_DebugPrint( WL_ERROR, "Q3_SetNoAvoid: '%s' is not an NPC!\n", ent->targetname );
+		return;
+	}
+
+	if(noAvoid)
+	{
+		ent->NPC->aiFlags |= NPCAI_NO_COLL_AVOID;
+	}
+	else
+	{
+		ent->NPC->aiFlags &= ~NPCAI_NO_COLL_AVOID;
+	}
 }
 
 /*
@@ -4664,12 +4918,12 @@ vec4_t textcolor_scroll;
 
 /*
 -------------------------
-SetTextColor
+Q3_SetTextColor
 -------------------------
 */
-static void SetTextColor ( vec4_t textcolor,const char *color)
+static void Q3_SetTextColor ( vec4_t textcolor,const char *color)
 {
-	G_DebugPrint( WL_WARNING, "SetTextColor: NOT SUPPORTED IN MP\n");
+	G_DebugPrint( WL_WARNING, "Q3_SetTextColor: NOT SUPPORTED IN MP\n");
 	return;
 }
 
@@ -4682,7 +4936,7 @@ Change color text prints in
 */
 static void Q3_SetCaptionTextColor ( const char *color)
 {
-	SetTextColor(textcolor_caption,color);
+	Q3_SetTextColor(textcolor_caption,color);
 }
 
 /*
@@ -4694,7 +4948,7 @@ Change color text prints in
 */
 static void Q3_SetCenterTextColor ( const char *color)
 {
-	SetTextColor(textcolor_center,color);
+	Q3_SetTextColor(textcolor_center,color);
 }
 
 /*
@@ -4706,7 +4960,7 @@ Change color text prints in
 */
 static void Q3_SetScrollTextColor ( const char *color)
 {
-	SetTextColor(textcolor_scroll,color);
+	Q3_SetTextColor(textcolor_scroll,color);
 }
 
 /*
@@ -4807,15 +5061,19 @@ qboolean Q3_Set( int taskID, int entID, const char *type_name, const char *data 
 		break;
 
 	case SET_ENEMY:
-		G_DebugPrint( WL_WARNING, "Q3_SetEnemy: NOT SUPPORTED IN MP\n");
+		Q3_SetEnemy( entID, (char *) data );
 		break;
 
 	case SET_LEADER:
-		G_DebugPrint( WL_WARNING, "Q3_SetLeader: NOT SUPPORTED IN MP\n");
+		Q3_SetLeader( entID, (char *) data );
 		break;
 
 	case SET_NAVGOAL:
-		G_DebugPrint( WL_WARNING, "Q3_SetNavGoal: NOT SUPPORTED IN MP\n");
+		if ( Q3_SetNavGoal( entID, (char *) data ) )
+		{
+			trap_ICARUS_TaskIDSet( ent, TID_MOVE_NAV, taskID );
+			return qfalse;	//Don't call it back
+		}
 		break;
 
 	case SET_ANIM_UPPER:

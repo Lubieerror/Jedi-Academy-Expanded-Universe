@@ -8,15 +8,15 @@
  *
  * $Archive: /MissionPack/code/game/ai_main.c $
  * $Author: osman $ 
- * $Revision: 1.27 $
+ * $Revision: 1.5 $
  * $Modtime: 6/06/01 1:11p $
- * $Date: 2003/10/07 13:36:41 $
+ * $Date: 2003/03/15 23:43:59 $
  *
  *****************************************************************************/
 
 
 #include "g_local.h"
-#include "q_shared.h"
+#include "qcommon/q_shared.h"
 #include "botlib.h"		//bot lib interface
 #include "be_aas.h"
 #include "be_ea.h"
@@ -38,7 +38,7 @@
 #define BOT_CTF_DEBUG	1
 */
 
-#define MAX_PATH		144
+//#define MAX_PATH		144
 
 #define BOT_THINK_TIME	0
 
@@ -239,14 +239,12 @@ void BotOrder(gentity_t *ent, int clientnum, int ordernum)
 		{
 			BotStraightTPOrderCheck(ent, ordernum, botstates[clientnum]);
 			botstates[clientnum]->state_Forced = ordernum;
-/*
 			botstates[clientnum]->chatObject = ent;
 			botstates[clientnum]->chatAltObject = NULL;
 			if (BotDoChat(botstates[clientnum], "OrderAccepted", 1))
 			{
 				botstates[clientnum]->chatTeam = 1;
 			}
-*/
 		}
 	}
 	else
@@ -263,14 +261,12 @@ void BotOrder(gentity_t *ent, int clientnum, int ordernum)
 				{
 					BotStraightTPOrderCheck(ent, ordernum, botstates[i]);
 					botstates[i]->state_Forced = ordernum;
-/*
 					botstates[i]->chatObject = ent;
 					botstates[i]->chatAltObject = NULL;
 					if (BotDoChat(botstates[i], "OrderAccepted", 0))
 					{
 						botstates[i]->chatTeam = 1;
 					}
-*/
 				}
 			}
 
@@ -660,6 +656,18 @@ void BotUpdateInput(bot_state_t *bs, int time, int elapsed_time) {
 
 /*
 ==============
+BotAIRegularUpdate
+==============
+*/
+void BotAIRegularUpdate(void) {
+	if (regularupdate_time < FloatTime()) {
+		trap_BotUpdateEntityItems();
+		regularupdate_time = FloatTime() + 0.3;
+	}
+}
+
+/*
+==============
 RemoveColorEscapeSequences
 ==============
 */
@@ -851,21 +859,26 @@ int BotAISetupClient(int client, struct bot_settings_s *settings, qboolean resta
 		bs->botWeaponWeights[WP_SABER] = 13;
 	}
 
+	//allocate a goal state
+	bs->gs = trap_BotAllocGoalState(client);
+
+	//allocate a weapon state
+	bs->ws = trap_BotAllocWeaponState();
+
 	bs->inuse = qtrue;
 	bs->entitynum = client;
 	bs->setupcount = 4;
 	bs->entergame_time = FloatTime();
+	bs->ms = trap_BotAllocMoveState();
 	numbots++;
 
 	//NOTE: reschedule the bot thinking
 	BotScheduleBotThink();
 
-/*
 	if (PlayersInGame())
 	{ //don't talk to yourself
 		BotDoChat(bs, "GeneralGreetings", 0);
 	}
-*/
 
 	return qtrue;
 }
@@ -884,6 +897,12 @@ int BotAIShutdownClient(int client, qboolean restart) {
 		return qfalse;
 	}
 
+	trap_BotFreeMoveState(bs->ms);
+	//free the goal state`			
+	trap_BotFreeGoalState(bs->gs);
+	//free the weapon weights
+	trap_BotFreeWeaponState(bs->ws);
+	//
 	//clear the bot state
 	memset(bs, 0, sizeof(bot_state_t));
 	//set the inuse flag to qfalse
@@ -931,6 +950,12 @@ void BotResetState(bot_state_t *bs) {
 	bs->client = client;
 	bs->entitynum = entitynum;
 	bs->entergame_time = entergame_time;
+	//reset several states
+	if (bs->ms) trap_BotResetMoveState(bs->ms);
+	if (bs->gs) trap_BotResetGoalState(bs->gs);
+	if (bs->ws) trap_BotResetWeaponState(bs->ws);
+	if (bs->gs) trap_BotResetAvoidGoals(bs->gs);
+	if (bs->ms) trap_BotResetAvoidReach(bs->ms);
 }
 
 /*
@@ -1005,7 +1030,7 @@ int OrgVisibleBox(vec3_t org1, vec3_t mins, vec3_t maxs, vec3_t org2, int ignore
 {
 	trace_t tr;
 
-	if (g_RMG.integer)
+	if (RMG.integer)
 	{
 		trap_Trace(&tr, org1, NULL, NULL, org2, ignore, MASK_SOLID);
 	}
@@ -1060,7 +1085,7 @@ int CheckForFunc(vec3_t org, int ignore)
 //perform pvs check based on rmg or not
 qboolean BotPVSCheck( const vec3_t p1, const vec3_t p2 )
 {
-	if (g_RMG.integer && bot_pvstype.integer)
+	if (RMG.integer && bot_pvstype.integer)
 	{
 		vec3_t subPoint;
 		VectorSubtract(p1, p2, subPoint);
@@ -1085,7 +1110,7 @@ int GetNearestVisibleWP(vec3_t org, int ignore)
 	vec3_t a, mins, maxs;
 
 	i = 0;
-	if (g_RMG.integer)
+	if (RMG.integer)
 	{
 		bestdist = 300;
 	}
@@ -1110,7 +1135,7 @@ int GetNearestVisibleWP(vec3_t org, int ignore)
 			VectorSubtract(org, gWPArray[i]->origin, a);
 			flLen = VectorLength(a);
 
-			if (flLen < bestdist && (g_RMG.integer || BotPVSCheck(org, gWPArray[i]->origin)) && OrgVisibleBox(org, mins, maxs, gWPArray[i]->origin, ignore))
+			if (flLen < bestdist && (RMG.integer || BotPVSCheck(org, gWPArray[i]->origin)) && OrgVisibleBox(org, mins, maxs, gWPArray[i]->origin, ignore))
 			{
 				bestdist = flLen;
 				bestindex = i;
@@ -1136,7 +1161,7 @@ int PassWayCheck(bot_state_t *bs, int windex)
 		return 0;
 	}
 
-	if (g_RMG.integer)
+	if (RMG.integer)
 	{
 		if ((gWPArray[windex]->flags & WPFLAG_RED_FLAG) ||
 			(gWPArray[windex]->flags & WPFLAG_BLUE_FLAG))
@@ -1191,7 +1216,7 @@ float TotalTrailDistance(int start, int end, bot_state_t *bs)
 			return -1;
 		}
 
-		if (!g_RMG.integer)
+		if (!RMG.integer)
 		{
 			if ((end > start && gWPArray[beginat]->flags & WPFLAG_ONEWAY_BACK) ||
 				(start > end && gWPArray[beginat]->flags & WPFLAG_ONEWAY_FWD))
@@ -1809,7 +1834,7 @@ int PassStandardEnemyChecks(bot_state_t *bs, gentity_t *en)
 	{ //ditto, the other way around
 		return 0;
 	}
-/*
+
 	if (g_gametype.integer == GT_JEDIMASTER && !en->client->ps.isJediMaster && !bs->cur_ps.isJediMaster)
 	{ //rules for attacking non-JM in JM mode
 		vec3_t vs;
@@ -1828,7 +1853,7 @@ int PassStandardEnemyChecks(bot_state_t *bs, gentity_t *en)
 			return 0;
 		}
 	}
-*/
+
 	return 1;
 }
 
@@ -2124,7 +2149,7 @@ int ScanForEnemies(bot_state_t *bs)
 	{ //only switch to a new enemy if he's significantly closer
 		hasEnemyDist = bs->frame_Enemy_Len;
 	}
-/*
+
 	if (bs->currentEnemy && bs->currentEnemy->client &&
 		bs->currentEnemy->client->ps.isJediMaster)
 	{ //The Jedi Master must die.
@@ -2145,7 +2170,7 @@ int ScanForEnemies(bot_state_t *bs)
 			}
 		}
 	}
-*/
+
 	while (i <= MAX_CLIENTS)
 	{
 		if (i != bs->client && g_entities[i].client && !OnSameTeam(&g_entities[bs->client], &g_entities[i]) && PassStandardEnemyChecks(bs, &g_entities[i]) && BotPVSCheck(g_entities[i].client->ps.origin, bs->eye) && PassLovedOneCheck(bs, &g_entities[i]))
@@ -2153,12 +2178,12 @@ int ScanForEnemies(bot_state_t *bs)
 			VectorSubtract(g_entities[i].client->ps.origin, bs->eye, a);
 			distcheck = VectorLength(a);
 			vectoangles(a, a);
-/*
+
 			if (g_entities[i].client->ps.isJediMaster)
 			{ //make us think the Jedi Master is close so we'll attack him above all
 				distcheck = 1;
 			}
-*/
+
 			if (distcheck < closest && ((InFieldOfVision(bs->viewangles, 90, a) && !BotMindTricked(bs->client, i)) || BotCanHear(bs, &g_entities[i], distcheck)) && OrgVisible(bs->eye, g_entities[i].client->ps.origin, -1))
 			{
 				if (BotMindTricked(bs->client, i))
@@ -2167,7 +2192,7 @@ int ScanForEnemies(bot_state_t *bs)
 					{
 						if (!hasEnemyDist || distcheck < (hasEnemyDist - 128))
 						{ //if we have an enemy, only switch to closer if he is 128+ closer to avoid flipping out
-							if (!noAttackNonJM )	//|| g_entities[i].client->ps.isJediMaster)
+							if (!noAttackNonJM || g_entities[i].client->ps.isJediMaster)
 							{
 								closest = distcheck;
 								bestindex = i;
@@ -2179,7 +2204,7 @@ int ScanForEnemies(bot_state_t *bs)
 				{
 					if (!hasEnemyDist || distcheck < (hasEnemyDist - 128))
 					{ //if we have an enemy, only switch to closer if he is 128+ closer to avoid flipping out
-						if (!noAttackNonJM )	//|| g_entities[i].client->ps.isJediMaster)
+						if (!noAttackNonJM || g_entities[i].client->ps.isJediMaster)
 						{
 							closest = distcheck;
 							bestindex = i;
@@ -2286,7 +2311,7 @@ int BotIsAChickenWuss(bot_state_t *bs)
 	{ //"coop" (not really)
 		return 0;
 	}
-/*
+
 	if (g_gametype.integer == GT_JEDIMASTER && !bs->cur_ps.isJediMaster)
 	{ //Then you may know no fear.
 		//Well, unless he's strong.
@@ -2299,7 +2324,7 @@ int BotIsAChickenWuss(bot_state_t *bs)
 		}
 		return 0;
 	}
-*/
+
 	if (g_gametype.integer == GT_CTF && bs->currentEnemy && bs->currentEnemy->client)
 	{
 		if (bs->currentEnemy->client->ps.powerups[PW_REDFLAG] ||
@@ -2319,12 +2344,12 @@ jmPass:
 	{ //don't run while raging
 		return 0;
 	}
-/*
+
 	if (g_gametype.integer == GT_JEDIMASTER && !bs->cur_ps.isJediMaster)
 	{ //be frightened of the jedi master? I guess in this case.
 		return 1;
 	}
-*/
+
 	bs->chickenWussCalculationTime = level.time + MAX_CHICKENWUSS_TIME;
 
 	if (g_entities[bs->client].health < BOT_RUN_HEALTH)
@@ -3032,7 +3057,7 @@ int Siege_TargetClosestObjective(bot_state_t *bs, int flag)
 	int i = 0;
 	int bestindex = -1;
 	float testdistance = 0;
-	float bestdistance = 999999999;
+	float bestdistance = 999999999.9f;
 	gentity_t *goalent;
 	vec3_t a, dif;
 	vec3_t mins, maxs;
@@ -3406,26 +3431,25 @@ int JMTakesPriority(bot_state_t *bs)
 	{
 		return 0;
 	}
-/*
+
 	if (bs->cur_ps.isJediMaster)
 	{
 		return 0;
 	}
-*/
+
 	//jmState becomes the index for the one who carries the saber. If jmState is -1 then the saber is currently
 	//without an owner
 	bs->jmState = -1;
 
 	while (i < MAX_CLIENTS)
 	{
-/*
 		if (g_entities[i].client && g_entities[i].inuse &&
 			g_entities[i].client->ps.isJediMaster)
 		{
 			bs->jmState = i;
 			break;
 		}
-*/
+
 		i++;
 	}
 
@@ -4467,7 +4491,7 @@ void SaberCombatHandling(bot_state_t *bs)
 				bs->beStill = level.time + Q_irand(500, 1000);
 				bs->saberSTime = level.time + Q_irand(1200, 1800);
 			}
-			else if (bs->currentEnemy->client->ps.weapon == WP_SABER && bs->frame_Enemy_Len < 80 && (Q_irand(1, 10) < 8 && bs->saberBFTime < level.time) || bs->saberBTime > level.time || BG_SaberInKata(bs->currentEnemy->client->ps.saberMove) || bs->currentEnemy->client->ps.saberMove == LS_SPINATTACK || bs->currentEnemy->client->ps.saberMove == LS_SPINATTACK_DUAL)
+			else if (bs->currentEnemy->client->ps.weapon == WP_SABER && bs->frame_Enemy_Len < 80 && ((Q_irand(1, 10) < 8 && bs->saberBFTime < level.time) || bs->saberBTime > level.time || BG_SaberInKata(bs->currentEnemy->client->ps.saberMove) || bs->currentEnemy->client->ps.saberMove == LS_SPINATTACK || bs->currentEnemy->client->ps.saberMove == LS_SPINATTACK_DUAL))
 			{
 				vec3_t vs;
 				vec3_t groundcheck;
@@ -4545,38 +4569,25 @@ void SaberCombatHandling(bot_state_t *bs)
 //so, by how much?
 float BotWeaponCanLead(bot_state_t *bs)
 {
-	int weap = bs->cur_ps.weapon;
-
-	if (weap == WP_BRYAR_PISTOL)
+	switch ( bs->cur_ps.weapon )
 	{
-		return 0.5;
+	case WP_BRYAR_PISTOL:
+		return 0.5f;
+	case WP_BLASTER:
+		return 0.35f;
+	case WP_BOWCASTER:
+		return 0.5f;
+	case WP_REPEATER:
+		return 0.45f;
+	case WP_THERMAL:
+		return 0.5f;
+	case WP_DEMP2:
+		return 0.35f;
+	case WP_ROCKET_LAUNCHER:
+		return 0.7f;
+	default:
+		return 0.0f;
 	}
-	if (weap == WP_BLASTER)
-	{
-		return 0.35;
-	}
-	if (weap == WP_BOWCASTER)
-	{
-		return 0.5;
-	}
-	if (weap == WP_REPEATER)
-	{
-		return 0.45;
-	}
-	if (weap == WP_THERMAL)
-	{
-		return 0.5;
-	}
-	if (weap == WP_DEMP2)
-	{
-		return 0.35;
-	}
-	if (weap == WP_ROCKET_LAUNCHER)
-	{
-		return 0.7;
-	}
-	
-	return 0;
 }
 
 //offset the desired view angles with aim leading in mind
@@ -5330,11 +5341,9 @@ void BotLovedOneDied(bot_state_t *bs, bot_state_t *loved, int lovelevel)
 
 	if (!PassLovedOneCheck(bs, loved->lastHurt))
 	{ //a loved one killed a loved one.. you cannot hate them
-/*
 		bs->chatObject = loved->lastHurt;
 		bs->chatAltObject = &g_entities[loved->client];
 		BotDoChat(bs, "LovedOneKilledLovedOne", 0);
-*/
 		return;
 	}
 
@@ -5348,22 +5357,18 @@ void BotLovedOneDied(bot_state_t *bs, bot_state_t *loved, int lovelevel)
 			{
 				//broke into the highest anger level
 				//CHAT: Hatred section
-/*
 				bs->chatObject = loved->lastHurt;
 				bs->chatAltObject = NULL;
 				BotDoChat(bs, "Hatred", 1);
-*/
 			}
 		}
 	}
 	else if (bs->revengeHateLevel < bs->loved_death_thresh-1)
 	{ //only switch hatred if we don't hate the existing revenge-enemy too much
 		//CHAT: BelovedKilled section
-/*
 		bs->chatObject = &g_entities[loved->client];
 		bs->chatAltObject = loved->lastHurt;
 		BotDoChat(bs, "BelovedKilled", 0);
-*/
 		bs->revengeHateLevel = 0;
 		bs->revengeEnemy = loved->lastHurt;
 	}
@@ -5543,7 +5548,7 @@ gentity_t *CheckForFriendInLOF(bot_state_t *bs)
 
 	trap_Trace(&tr, trfrom, mins, maxs, trto, bs->client, MASK_PLAYERSOLID);
 
-	if (tr.fraction != 1 && tr.entityNum < MAX_CLIENTS)
+	if (tr.fraction != 1 && tr.entityNum <= MAX_CLIENTS)
 	{
 		trent = &g_entities[tr.entityNum];
 
@@ -5597,7 +5602,6 @@ void BotScanForLeader(bot_state_t *bs)
 }
 
 //w3rd to the p33pz.
-/*
 void BotReplyGreetings(bot_state_t *bs)
 {
 	int i = 0;
@@ -5625,7 +5629,6 @@ void BotReplyGreetings(bot_state_t *bs)
 		i++;
 	}
 }
-*/
 
 //try to move in to grab a nearby flag
 void CTFFlagMovement(bot_state_t *bs)
@@ -6090,21 +6093,17 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 			if (PassLovedOneCheck(bs, bs->lastHurt))
 			{
 				//CHAT: Died
-/*
 				bs->chatObject = bs->lastHurt;
 				bs->chatAltObject = NULL;
 				BotDoChat(bs, "Died", 0);
-*/
 			}
 			else if (!PassLovedOneCheck(bs, bs->lastHurt) &&
 				botstates[bs->lastHurt->s.number] &&
 				PassLovedOneCheck(botstates[bs->lastHurt->s.number], &g_entities[bs->client]))
 			{ //killed by a bot that I love, but that does not love me
-/*
 				bs->chatObject = bs->lastHurt;
 				bs->chatAltObject = NULL;
 				BotDoChat(bs, "KilledOnPurposeByLove", 0);
-*/
 			}
 
 			bs->deathActivitiesDone = 1;
@@ -6121,7 +6120,8 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 		bs->wpSeenTime = 0;
 		bs->wpDirection = 0;
 
-		if (rand()%10 < 5)	// && (!bs->doChat || bs->chatTime < level.time))
+		if (rand()%10 < 5 &&
+			(!bs->doChat || bs->chatTime < level.time))
 		{
 			trap_EA_Attack(bs->client);
 		}
@@ -6423,11 +6423,9 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 				bs->lastAttacked && bs->lastAttacked == bs->currentEnemy)
 			{
 				//CHAT: Destroyed hated one [KilledHatedOne section]
-/*
 				bs->chatObject = bs->revengeEnemy;
 				bs->chatAltObject = NULL;
 				BotDoChat(bs, "KilledHatedOne", 1);
-*/
 				bs->revengeEnemy = NULL;
 				bs->revengeHateLevel = 0;
 			}
@@ -6435,11 +6433,9 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 				bs->lastAttacked && bs->lastAttacked == bs->currentEnemy)
 			{
 				//CHAT: Killed
-/*
 				bs->chatObject = bs->currentEnemy;
 				bs->chatAltObject = NULL;
 				BotDoChat(bs, "Killed", 0);
-*/
 			}
 
 			bs->currentEnemy = NULL;
@@ -6528,7 +6524,7 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 	//ESTABLISH VISIBILITIES AND DISTANCES FOR THE WHOLE FRAME HERE
 	if (bs->wpCurrent)
 	{
-		if (g_RMG.integer)
+		if (RMG.integer)
 		{ //this is somewhat hacky, but in RMG we don't really care about vertical placement because points are scattered across only the terrain.
 			vec3_t vecB, vecC;
 
@@ -6644,7 +6640,7 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 
 		if (bs->frame_Waypoint_Vis || (bs->wpCurrent->flags & WPFLAG_NOVIS))
 		{
-			if (g_RMG.integer)
+			if (RMG.integer)
 			{
 				bs->wpSeenTime = level.time + 5000; //if we lose sight of the point, we have 1.5 seconds to regain it before we drop it
 			}
@@ -6709,7 +6705,7 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 			}
 		}
 
-		if (g_RMG.integer)
+		if (RMG.integer)
 		{
 			if (bs->frame_Waypoint_Vis)
 			{
@@ -6720,7 +6716,7 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 			}
 		}
 
-		if (bs->frame_Waypoint_Len < wpTouchDist || (g_RMG.integer && bs->frame_Waypoint_Len < wpTouchDist*2))
+		if (bs->frame_Waypoint_Len < wpTouchDist || (RMG.integer && bs->frame_Waypoint_Len < wpTouchDist*2))
 		{
 			WPTouchRoutine(bs);
 
@@ -6777,7 +6773,7 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 		doingFallback = BotFallbackNavigation(bs);
 	}
 
-	if (g_RMG.integer)
+	if (RMG.integer)
 	{ //for RMG if the bot sticks around an area too long, jump around randomly some to spread to a new area (horrible hacky method)
 		vec3_t vSubDif;
 
@@ -6806,7 +6802,7 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 		bs->lastSignificantChangeTime = level.time + 25000;
 	}
 
-	if (bs->wpCurrent && g_RMG.integer)
+	if (bs->wpCurrent && RMG.integer)
 	{
 		qboolean doJ = qfalse;
 
@@ -7062,7 +7058,6 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 		}
 	}
 
-/*
 	if (bs->doChat && bs->chatTime > level.time && (!bs->currentEnemy || !bs->frame_Enemy_Vis))
 	{
 		return;
@@ -7090,7 +7085,6 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 		}
 		bs->doChat = 0;
 	}
-*/
 
 	CTFFlagMovement(bs);
 
@@ -7177,7 +7171,7 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 	{
 		bs->forceWeaponSelect = 0;
 	}
-/*
+
 	if (g_gametype.integer == GT_JEDIMASTER && !bs->cur_ps.isJediMaster && bs->jmState == -1 && gJMSaberEnt && gJMSaberEnt->inuse)
 	{
 		vec3_t saberLen;
@@ -7194,7 +7188,7 @@ void StandardBotAI(bot_state_t *bs, float thinktime)
 			}
 		}
 	}
-*/
+
 	if (bs->beStill < level.time && !WaitingForNow(bs, bs->goalPosition) && !fjHalt)
 	{
 		VectorSubtract(bs->goalPosition, bs->origin, bs->goalMovedir);
@@ -7482,13 +7476,12 @@ int gUpdateVars = 0;
 BotAIStartFrame
 ==================
 */
-static int local_time;
-static int lastbotthink_time;
-
 int BotAIStartFrame(int time) {
 	int i;
 	int elapsed_time, thinktime;
-	static int botlib_residual;
+	static int local_time;
+//	static int botlib_residual;
+	static int lastbotthink_time;
 
 	if (gUpdateVars < level.time)
 	{
@@ -7593,11 +7586,6 @@ int BotAISetup( int restart ) {
 	trap_Cvar_Update(&bot_forcepowers);
 	//end rww
 
-	eFlagRed = NULL;
-	eFlagBlue = NULL;
-	droppedRedFlag = NULL;
-	droppedBlueFlag = NULL;
-
 	//if the game is restarted for a tournament
 	if (restart) {
 		return qtrue;
@@ -7636,14 +7624,6 @@ int BotAIShutdown( int restart ) {
 	else {
 		trap_BotLibShutdown();
 	}
-
-	eFlagRed = NULL;
-	eFlagBlue = NULL;
-	droppedRedFlag = NULL;
-	droppedBlueFlag = NULL;
-	local_time = 0;
-	lastbotthink_time = 0;
-
 	return qtrue;
 }
 

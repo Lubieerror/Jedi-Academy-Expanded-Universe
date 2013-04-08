@@ -1,12 +1,7 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 // this include must remain at the top of every CPP file
 #include "client.h"
-
-#ifdef _XBOX
-#include "../cgame/cg_local.h"
-#include "cl_data.h"
-#endif
 
 
 #if !defined(FX_SCHEDULER_H_INC)
@@ -20,9 +15,6 @@ struct SEffectList
 	CEffect *mEffect;
 	int		mKillTime;
 	bool	mPortal;
-#ifdef _XBOX
-	int		mClient;
-#endif
 };
 
 #define PI		3.14159f
@@ -186,11 +178,7 @@ void FX_Add( bool portal )
 	int numFx = activeFx;	//but stop when there can't be any more left!
 	for ( i = 0, ef = effectList; i < MAX_EFFECTS && numFx; i++, ef++ )
 	{
-#ifdef _XBOX
-		if ( ef->mEffect != 0 )//&& ef->mClient == ClientManager::ActiveClientNum() )
-#else
 		if ( ef->mEffect != 0)
-#endif
 		{ 
 			--numFx;
 			if (portal != ef->mPortal)
@@ -242,9 +230,6 @@ void FX_AddPrimitive( CEffect **pEffect, int killTime )
 	item->mEffect = *pEffect;
 	item->mKillTime = theFxHelper.mTime + killTime;
 	item->mPortal = gEffectsInPortal;	//global set in AddScheduledEffects
-#ifdef _XBOX
-	item->mClient = ClientManager::ActiveClientNum();
-#endif
 
 	activeFx++;
 

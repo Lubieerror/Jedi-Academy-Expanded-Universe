@@ -2,7 +2,7 @@
 //
 // bg_slidemove.c -- part of bg_pmove functionality
 
-#include "q_shared.h"
+#include "qcommon/q_shared.h"
 #include "bg_public.h"
 #include "bg_local.h"
 
@@ -24,12 +24,10 @@ output: origin, velocity, impacts, stairup boolean
 #ifdef QAGAME
 extern void G_FlyVehicleSurfaceDestruction(gentity_t *veh, trace_t *trace, int magnitude, qboolean force ); //g_vehicle.c
 extern qboolean G_CanBeEnemy(gentity_t *self, gentity_t *enemy); //w_saber.c
-extern void Client_CheckImpactBBrush( gentity_t *self, gentity_t *other );
 #endif
 
 extern qboolean BG_UnrestrainedPitchRoll( playerState_t *ps, Vehicle_t *pVeh );
 
-#include "../namespace_begin.h"
 
 extern bgEntity_t *pm_entSelf;
 extern bgEntity_t *pm_entVeh;
@@ -582,6 +580,7 @@ qboolean PM_ClientImpact( trace_t *trace, qboolean damageSelf )
 ===============
 */
 #ifdef QAGAME
+extern void Client_CheckImpactBBrush( gentity_t *self, gentity_t *other );
 qboolean PM_ClientImpact( trace_t *trace )
 {
 	//don't try to predict this
@@ -908,11 +907,8 @@ void PM_StepSlideMove( qboolean gravity ) {
 	{
 		// apply ground friction, even if on ladder
 		if (pEnt &&
-			pEnt->s.NPC_class == CLASS_ATST ||
-				(pEnt->s.NPC_class == CLASS_VEHICLE &&
-					pEnt->m_pVehicle &&
-					pEnt->m_pVehicle->m_pVehicleInfo->type == VH_WALKER)
-			)
+			(pEnt->s.NPC_class == CLASS_ATST ||
+			(pEnt->s.NPC_class == CLASS_VEHICLE && pEnt->m_pVehicle && pEnt->m_pVehicle->m_pVehicleInfo->type == VH_WALKER) ) )
 		{//AT-STs can step high
 			up[2] += 66.0f;
 			isGiant = qtrue;
@@ -995,6 +991,18 @@ void PM_StepSlideMove( qboolean gravity ) {
 				VectorCopy (start_v, pm->ps->velocity);
 			}
 		}
+		/*
+		else if ( pm->ps->clientNum >= MAX_CLIENTS//NPC
+			&& isGiant 
+			&& trace.entityNum < MAX_CLIENTS
+			&& pEnt 
+			&& pEnt->s.NPC_class == CLASS_ATST 
+			&& OnSameTeam( pEnt, traceEnt) )
+		{//NPC AT-ST's don't step up on allies
+			VectorCopy (start_o, pm->ps->origin);
+			VectorCopy (start_v, pm->ps->velocity);
+		}
+		*/
 		else
 		{
 			VectorCopy (trace.endpos, pm->ps->origin);
@@ -1055,5 +1063,4 @@ void PM_StepSlideMove( qboolean gravity ) {
 	}
 }
 
-#include "../namespace_end.h"
 

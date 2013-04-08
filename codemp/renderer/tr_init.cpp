@@ -1,5 +1,5 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 // tr_init.c -- functions that are not called every frame
 
@@ -14,9 +14,9 @@
 #include "tr_font.h"
 
 #if !defined (MINIHEAP_H_INC)
-	#include "../qcommon/MiniHeap.h"
+	#include "qcommon/MiniHeap.h"
 
-#include "../ghoul2/G2_local.h"
+#include "ghoul2/G2_local.h"
 #endif
 
 
@@ -144,9 +144,6 @@ cvar_t	*r_textureMode;
 cvar_t	*r_offsetFactor;
 cvar_t	*r_offsetUnits;
 cvar_t	*r_gamma;
-#ifdef _XBOX
-cvar_t  *s_brightness_volume;
-#endif
 cvar_t	*r_intensity;
 cvar_t	*r_lockpvs;
 cvar_t	*r_noportals;
@@ -178,15 +175,6 @@ cvar_t	*r_maxpolyverts;
 int		max_polyverts;
 
 cvar_t	*r_modelpoolmegs;
-
-#ifdef _XBOX
-cvar_t	*r_hdreffect;
-cvar_t  *r_sundir_x;
-cvar_t  *r_sundir_y;
-cvar_t  *r_sundir_z;
-cvar_t  *r_hdrbloom;
-#endif
-
 
 /*
 Ghoul2 Insert Start
@@ -238,7 +226,6 @@ void ( APIENTRY * qglTexImage3DEXT) (GLenum, GLint, GLenum, GLsizei, GLsizei, GL
 void ( APIENTRY * qglTexSubImage3DEXT) (GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, GLenum, const GLvoid *);
 
 
-#ifndef _XBOX	// GLOWXXX
 // Declare Register Combiners function pointers.
 PFNGLCOMBINERPARAMETERFVNV				qglCombinerParameterfvNV = NULL;
 PFNGLCOMBINERPARAMETERIVNV				qglCombinerParameterivNV = NULL;
@@ -291,8 +278,6 @@ PFNGLGETPROGRAMLOCALPARAMETERFVARBPROC qglGetProgramLocalParameterfvARB = NULL;
 PFNGLGETPROGRAMIVARBPROC qglGetProgramivARB = NULL;
 PFNGLGETPROGRAMSTRINGARBPROC qglGetProgramStringARB = NULL;
 PFNGLISPROGRAMARBPROC qglIsProgramARB = NULL;
-#endif
-
 
 void RE_SetLightStyle(int style, int color);
 
@@ -327,7 +312,6 @@ static void AssertCvarRange( cvar_t *cv, float minVal, float maxVal, qboolean sh
 
 void R_Splash()
 {
-#ifndef _XBOX
 	image_t *pImage;
 /*	const char* s = Cvar_VariableString("se_language");
 	if (stricmp(s,"english"))
@@ -348,32 +332,10 @@ void R_Splash()
 	}
 	GL_State(GLS_SRCBLEND_ONE | GLS_DSTBLEND_ZERO);
 
-#ifdef _XBOX
-	int width;
-	if(glw_state->isWidescreen)
-		width = 720;
-	else
-		width = 640;
-#else
 	const int width = 640;
-#endif
 	const int height = 480;
-#ifdef _XBOX
-	float x1, x2;
-	if(glw_state->isWidescreen)
-	{
-		x1 = 360 - width / 2;
-		x2 = 360 + width / 2;
-	}
-	else
-	{
-		x1 = 320 - width / 2;
-		x2 = 320 + width / 2;
-	}
-#else
 	const float x1 = 320 - width / 2;
 	const float x2 = 320 + width / 2;
-#endif
 	const float y1 = 240 - height / 2;
 	const float y2 = 240 + height / 2;
 
@@ -390,7 +352,6 @@ void R_Splash()
 	qglEnd();
 
 	GLimp_EndFrame();
-#endif
 }
 
 /*
@@ -476,8 +437,6 @@ void GL_CheckErrors( void ) {
 
 #endif //!DEDICATED
 
-#ifndef _XBOX
-
 /*
 ** R_GetModeInfo
 */
@@ -487,8 +446,7 @@ typedef struct vidmode_s
     int         width, height;
 } vidmode_t;
 
-const vidmode_t r_vidModes[] =
-{
+const vidmode_t r_vidModes[] = {
     { "Mode  0: 320x240",		320,	240 },
     { "Mode  1: 400x300",		400,	300 },
     { "Mode  2: 512x384",		512,	384 },
@@ -544,8 +502,6 @@ static void R_ModeList_f( void )
 	Com_Printf ("\n" );
 }
 
-#endif	// _XBOX
-
 /* 
 ============================================================================== 
  
@@ -560,7 +516,6 @@ R_TakeScreenshot
 ================== 
 */  
 void R_TakeScreenshot( int x, int y, int width, int height, char *fileName ) {
-#ifndef _XBOX
 	byte		*buffer;
 	int			i, c, temp;
 
@@ -592,7 +547,6 @@ void R_TakeScreenshot( int x, int y, int width, int height, char *fileName ) {
 	FS_WriteFile( fileName, buffer, c );
 
 	Hunk_FreeTempMemory( buffer );
-#endif
 }
 
 /* 
@@ -601,7 +555,6 @@ R_TakeScreenshot
 ================== 
 */  
 void R_TakeScreenshotJPEG( int x, int y, int width, int height, char *fileName ) {
-#ifndef _XBOX
 	byte		*buffer;
 
 	buffer = (unsigned char *)Hunk_AllocateTempMemory(glConfig.vidWidth*glConfig.vidHeight*4);
@@ -617,7 +570,6 @@ void R_TakeScreenshotJPEG( int x, int y, int width, int height, char *fileName )
 	SaveJPG( fileName, 95, glConfig.vidWidth, glConfig.vidHeight, buffer);
 
 	Hunk_FreeTempMemory( buffer );
-#endif
 }
 
 /* 
@@ -655,7 +607,6 @@ the menu system, sampled down from full screen distorted images
 */
 #define LEVELSHOTSIZE 256
 static void R_LevelShot( void ) {
-#ifndef _XBOX
 	char		checkname[MAX_OSPATH];
 	byte		*buffer;
 	byte		*source;
@@ -712,7 +663,6 @@ static void R_LevelShot( void ) {
 	Hunk_FreeTempMemory( source );
 
 	Com_Printf ("Wrote %s\n", checkname );
-#endif
 }
 
 /* 
@@ -728,7 +678,6 @@ Doesn't print the pacifier message if there is a second arg
 ================== 
 */  
 void R_ScreenShotTGA_f (void) {
-#ifndef _XBOX
 	char		checkname[MAX_OSPATH];
 	static	int	lastNumber = -1;
 	qboolean	silent;
@@ -780,12 +729,10 @@ void R_ScreenShotTGA_f (void) {
 	if ( !silent ) {
 		Com_Printf ( "Wrote %s\n", checkname);
 	}
-#endif
 } 
 
 //jpeg  vession
 void R_ScreenShot_f (void) {
-#ifndef _XBOX
 	char		checkname[MAX_OSPATH];
 	static	int	lastNumber = -1;
 	qboolean	silent;
@@ -836,7 +783,6 @@ void R_ScreenShot_f (void) {
 	if ( !silent ) {
 		Com_Printf ( "Wrote %s\n", checkname);
 	}
-#endif
 } 
 
 //============================================================================
@@ -884,9 +830,6 @@ void GL_SetDefaultState( void )
 	qglEnable( GL_SCISSOR_TEST );
 	qglDisable( GL_CULL_FACE );
 	qglDisable( GL_BLEND );
-#ifdef _XBOX
-	qglDisable( GL_LIGHTING );
-#endif
 }
 
 
@@ -895,6 +838,30 @@ void GL_SetDefaultState( void )
 GfxInfo_f
 ================
 */
+extern bool g_bTextureRectangleHack;
+
+/*
+================
+R_PrintLongString
+
+Workaround for ri.Printf's 1024 characters buffer limit.
+================
+*/
+void R_PrintLongString(const char *string) {
+	char buffer[1024];
+	const char *p;
+	int size = strlen(string);
+
+	p = string;
+	while(size > 0)
+	{
+		Q_strncpyz(buffer, p, sizeof (buffer) );
+		Com_Printf( "%s", buffer );
+		p += 1023;
+		size -= 1023;
+	}
+}
+
 void GfxInfo_f( void ) 
 {
 	cvar_t *sys_cpustring = Cvar_Get( "sys_cpustring", "", CVAR_ROM );
@@ -919,7 +886,8 @@ void GfxInfo_f( void )
 	Com_Printf ("\nGL_VENDOR: %s\n", glConfig.vendor_string );
 	Com_Printf ("GL_RENDERER: %s\n", glConfig.renderer_string );
 	Com_Printf ("GL_VERSION: %s\n", glConfig.version_string );
-	Com_Printf ("GL_EXTENSIONS: %s\n", glConfig.extensions_string );
+	R_PrintLongString( glConfig.extensions_string );
+	Com_Printf ("\n");
 	Com_Printf ("GL_MAX_TEXTURE_SIZE: %d\n", glConfig.maxTextureSize );
 	Com_Printf ("GL_MAX_ACTIVE_TEXTURES_ARB: %d\n", glConfig.maxActiveTextures );
 	Com_Printf ("\nPIXELFORMAT: color(%d-bits) Z(%d-bit) stencil(%d-bits)\n", glConfig.colorBits, glConfig.depthBits, glConfig.stencilBits );
@@ -980,6 +948,7 @@ void GfxInfo_f( void )
 	Com_Printf ("anisotropic filtering: %s  ", enablestrings[(r_ext_texture_filter_anisotropic->integer != 0) && glConfig.maxTextureFilterAnisotropy] );
 		Com_Printf ("(%f of %f)\n", r_ext_texture_filter_anisotropic->value, glConfig.maxTextureFilterAnisotropy );
 	Com_Printf ("Dynamic Glow: %s\n", enablestrings[r_DynamicGlow->integer] );
+	if (g_bTextureRectangleHack) Com_Printf ("Dynamic Glow ATI BAD DRIVER HACK %s\n", enablestrings[g_bTextureRectangleHack] );
 
 	if ( r_finish->integer ) {
 		Com_Printf ("Forcing glFinish\n" );
@@ -991,6 +960,11 @@ void GfxInfo_f( void )
 	{
 		Com_Printf ("Light Grid size set to (%.2f %.2f %.2f)\n", tr.world->lightGridSize[0], tr.world->lightGridSize[1], tr.world->lightGridSize[2] );
 	}
+}
+
+void R_AtiHackToggle_f(void)
+{
+	g_bTextureRectangleHack = !g_bTextureRectangleHack;
 }
 
 #endif // !DEDICATED
@@ -1018,7 +992,7 @@ void R_Register( void )
 #endif
 	r_ext_texture_filter_anisotropic = Cvar_Get( "r_ext_texture_filter_anisotropic", "16", CVAR_ARCHIVE );
 
-	r_DynamicGlow = Cvar_Get( "r_DynamicGlow", "1", CVAR_ARCHIVE );
+	r_DynamicGlow = Cvar_Get( "r_DynamicGlow", "0", CVAR_ARCHIVE );
 	r_DynamicGlowPasses = Cvar_Get( "r_DynamicGlowPasses", "5", CVAR_CHEAT );
 	r_DynamicGlowDelta  = Cvar_Get( "r_DynamicGlowDelta", "0.8f", CVAR_CHEAT );
 	r_DynamicGlowIntensity = Cvar_Get( "r_DynamicGlowIntensity", "1.13f", CVAR_CHEAT );
@@ -1068,11 +1042,7 @@ void R_Register( void )
 	r_autolodscalevalue = Cvar_Get( "r_autolodscalevalue", "0", CVAR_ROM );
 
 	r_flares = Cvar_Get ("r_flares", "1", CVAR_ARCHIVE );
-#ifdef _XBOX
-	r_znear = Cvar_Get( "r_znear", "2", CVAR_CHEAT );
-#else
 	r_znear = Cvar_Get( "r_znear", "4", CVAR_CHEAT );
-#endif
 	AssertCvarRange( r_znear, 0.001f, 200, qtrue );
 	r_ignoreGLErrors = Cvar_Get( "r_ignoreGLErrors", "1", CVAR_ARCHIVE );
 	r_fastsky = Cvar_Get( "r_fastsky", "0", CVAR_ARCHIVE );
@@ -1089,11 +1059,6 @@ void R_Register( void )
 #else
 	r_gamma = Cvar_Get( "r_gamma", "1", CVAR_ARCHIVE );
 #endif
-
-#ifdef _XBOX
-	s_brightness_volume = Cvar_Get( "s_brightness_volume", "1", CVAR_ARCHIVE );
-#endif
-
 	r_facePlaneCull = Cvar_Get ("r_facePlaneCull", "1", CVAR_ARCHIVE );
 
 	r_cullRoofFaces = Cvar_Get ("r_cullRoofFaces", "0", CVAR_CHEAT ); //attempted smart method of culling out upwards facing surfaces on roofs for automap shots -rww
@@ -1161,14 +1126,6 @@ void R_Register( void )
 	r_shadows = Cvar_Get( "cg_shadows", "1", 0 );
 	r_shadowRange = Cvar_Get( "r_shadowRange", "1000", 0 );
 
-#ifdef _XBOX
-	r_hdreffect = Cvar_Get( "r_hdreffect", "0", 0 );
-	r_sundir_x = Cvar_Get( "r_sundir_x", "0.45", 0 );
-	r_sundir_y = Cvar_Get( "r_sundir_y", "0.3", 0 );
-	r_sundir_z = Cvar_Get( "r_sundir_z", "0.9", 0 );
-	r_hdrbloom = Cvar_Get( "r_hdrbloom", "1.0", 0 );
-#endif
-
 	r_maxpolys = Cvar_Get( "r_maxpolys", va("%d", MAX_POLYS), 0);
 	r_maxpolyverts = Cvar_Get( "r_maxpolyverts", va("%d", MAX_POLYVERTS), 0);
 /*
@@ -1211,16 +1168,16 @@ extern qboolean Sys_LowPhysicalMemory();
 	Cmd_AddCommand( "imagelist", R_ImageList_f );
 	Cmd_AddCommand( "shaderlist", R_ShaderList_f );
 	Cmd_AddCommand( "skinlist", R_SkinList_f );
+	Cmd_AddCommand( "fontlist", R_FontList_f );
 	Cmd_AddCommand( "screenshot", R_ScreenShot_f );
 	Cmd_AddCommand( "screenshot_tga", R_ScreenShotTGA_f );
 	Cmd_AddCommand( "gfxinfo", GfxInfo_f );
+	Cmd_AddCommand( "r_atihack", R_AtiHackToggle_f );
 	Cmd_AddCommand( "r_we", R_WorldEffect_f);
 	Cmd_AddCommand( "imagecacheinfo", RE_RegisterImages_Info_f);
 #endif
 	Cmd_AddCommand( "modellist", R_Modellist_f );
-#ifndef _XBOX
 	Cmd_AddCommand( "modelist", R_ModeList_f );
-#endif
 	Cmd_AddCommand( "modelcacheinfo", RE_RegisterModels_Info_f);
 
 }
@@ -1237,28 +1194,11 @@ void R_Init( void ) {
 	byte *ptr;
 
 //	Com_Printf ("----- R_Init -----\n" );
-#ifdef _XBOX
-	/*
-	Hunk_Clear();
-		
-	extern void CM_Free(void);
-	CM_Free();
-	*/
-
-	//Save visibility info as it has already been set.
-	SPARC<byte> *vis = tr.externalVisData;
-#endif
-
 	// clear all our internal state
 	Com_Memset( &tr, 0, sizeof( tr ) );
 	Com_Memset( &backEnd, 0, sizeof( backEnd ) );
 #ifndef DEDICATED
 	Com_Memset( &tess, 0, sizeof( tess ) );
-#endif
-
-#ifdef _XBOX
-	//Restore visibility info.
-	tr.externalVisData = vis;
 #endif
 
 //	Swap_Init();
@@ -1311,7 +1251,7 @@ void R_Init( void ) {
 	if (max_polyverts < MAX_POLYVERTS)
 		max_polyverts = MAX_POLYVERTS;
 
-	ptr = (unsigned char *)Hunk_Alloc( sizeof( *backEndData ) + sizeof(srfPoly_t) * max_polys + sizeof(polyVert_t) * max_polyverts, h_low);
+	ptr = (byte *)Hunk_Alloc( sizeof( *backEndData ) + sizeof(srfPoly_t) * max_polys + sizeof(polyVert_t) * max_polyverts, h_low);
 	backEndData = (backEndData_t *) ptr;
 	backEndData->polys = (srfPoly_t *) ((char *) ptr + sizeof( *backEndData ));
 	backEndData->polyVerts = (polyVert_t *) ((char *) ptr + sizeof( *backEndData ) + sizeof(srfPoly_t) * max_polys);
@@ -1328,9 +1268,7 @@ void R_Init( void ) {
 	R_InitShaders(qfalse);
 	R_InitSkins();
 
-/*
 	R_TerrainInit(); //rwwRMG - added
-*/
 
 	R_InitFonts();
 #endif
@@ -1360,9 +1298,11 @@ void RE_Shutdown( qboolean destroyWindow ) {
 	Cmd_RemoveCommand ("imagelist");
 	Cmd_RemoveCommand ("shaderlist");
 	Cmd_RemoveCommand ("skinlist");
+	Cmd_RemoveCommand ("fontlist");
 	Cmd_RemoveCommand ("screenshot");
 	Cmd_RemoveCommand ("screenshot_tga");
 	Cmd_RemoveCommand ("gfxinfo");
+	Cmd_RemoveCommand ("r_atihack");
 	Cmd_RemoveCommand ("r_we");
 	Cmd_RemoveCommand ("imagecacheinfo");
 	Cmd_RemoveCommand ("modellist");
@@ -1370,7 +1310,6 @@ void RE_Shutdown( qboolean destroyWindow ) {
 	Cmd_RemoveCommand ("modelcacheinfo");
 #ifndef DEDICATED
 
-#ifndef _XBOX	// GLOWXXX
 	if ( r_DynamicGlow && r_DynamicGlow->integer )
 	{
 		// Release the Glow Vertex Shader.
@@ -1403,19 +1342,14 @@ void RE_Shutdown( qboolean destroyWindow ) {
 		// Release the blur texture.
 		qglDeleteTextures( 1, &tr.blurImage );
 	}
-#endif
 
-/*
 	R_TerrainShutdown(); //rwwRMG - added
-*/
 
 	R_ShutdownFonts();
 	if ( tr.registered ) {
 		R_SyncRenderThread();
 		R_ShutdownCommandBuffers();
-//#ifndef _XBOX
 		if (destroyWindow)
-//#endif
 		{
 			R_DeleteTextures();		// only do this for vid_restart now, not during things like map load
 		}
@@ -1442,9 +1376,7 @@ Touch all images to make sure they are resident
 void RE_EndRegistration( void ) {
 	R_SyncRenderThread();
 	if (!Sys_LowPhysicalMemory()) {
-#ifndef _XBOX
 		RB_ShowImages();
-#endif
 	}
 }
 
@@ -1522,8 +1454,10 @@ refexport_t *GetRefAPI ( int apiVersion ) {
 	re.AddPolyToScene = RE_AddPolyToScene;
 	re.AddDecalToScene = RE_AddDecalToScene;
 	re.LightForPoint = R_LightForPoint;
+#ifndef VV_LIGHTING
 	re.AddLightToScene = RE_AddLightToScene;
 	re.AddAdditiveLightToScene = RE_AddAdditiveLightToScene;
+#endif
 	re.RenderScene = RE_RenderScene;
 
 	re.SetColor = RE_SetColor;

@@ -17,9 +17,15 @@
 #define	MAX_SPAWN_VARS_CHARS	4096
 
 
-#define	GAME_VERSION		"basejk-1"
+#define	GAME_VERSION		"basejka-1"
+
+#define DEFAULT_SABER		"Kyle"
+#define DEFAULT_SABER_MODEL	"models/weapons2/saber/saber_w.glm"
 
 #define	STEPSIZE		18
+
+#define DEFAULT_FORCEPOWERS	"5-1-000000000000000000"
+//"rank-side-heal.lev.speed.push.pull.tele.grip.lightning.rage.protect.absorb.teamheal.teamforce.drain.see"
 
 #define	DEFAULT_GRAVITY		800
 #define	GIB_HEALTH			-40
@@ -66,29 +72,28 @@
 #define CS_VOTE_STRING			9
 #define	CS_VOTE_YES				10
 #define	CS_VOTE_NO				11
-#define CS_VOTE_CALLER			12
 
-#define CS_TEAMVOTE_TIME		13
-#define CS_TEAMVOTE_STRING		15
-#define	CS_TEAMVOTE_YES			17
-#define	CS_TEAMVOTE_NO			19
+#define CS_TEAMVOTE_TIME		12
+#define CS_TEAMVOTE_STRING		14
+#define	CS_TEAMVOTE_YES			16
+#define	CS_TEAMVOTE_NO			18
 
-#define	CS_GAME_VERSION			21
-#define	CS_LEVEL_START_TIME		22		// so the timer only shows the current level
-#define	CS_INTERMISSION			23		// when 1, fraglimit/timelimit has been hit and intermission will start in a second or two
-#define CS_FLAGSTATUS			24		// string indicating flag status in CTF
-#define CS_SHADERSTATE			25
-#define CS_BOTINFO				26
+#define	CS_GAME_VERSION			20
+#define	CS_LEVEL_START_TIME		21		// so the timer only shows the current level
+#define	CS_INTERMISSION			22		// when 1, fraglimit/timelimit has been hit and intermission will start in a second or two
+#define CS_FLAGSTATUS			23		// string indicating flag status in CTF
+#define CS_SHADERSTATE			24
+#define CS_BOTINFO				25
 
-#define	CS_ITEMS				28		// string of 0's and 1's that tell which items are present
+#define	CS_ITEMS				27		// string of 0's and 1's that tell which items are present
 
-#define CS_CLIENT_JEDIMASTER	29		// current jedi master
-#define CS_CLIENT_DUELWINNER	30		// current duel round winner - needed for printing at top of scoreboard
-#define CS_CLIENT_DUELISTS		31		// client numbers for both current duelists. Needed for a number of client-side things.
-#define CS_CLIENT_DUELHEALTHS	32		// nmckenzie: DUEL_HEALTH.  Hopefully adding this cs is safe and good?
-#define CS_GLOBAL_AMBIENT_SET	33
+#define CS_CLIENT_JEDIMASTER	28		// current jedi master
+#define CS_CLIENT_DUELWINNER	29		// current duel round winner - needed for printing at top of scoreboard
+#define CS_CLIENT_DUELISTS		30		// client numbers for both current duelists. Needed for a number of client-side things.
+#define CS_CLIENT_DUELHEALTHS	31		// nmckenzie: DUEL_HEALTH.  Hopefully adding this cs is safe and good?
+#define CS_GLOBAL_AMBIENT_SET	32
 
-#define CS_AMBIENT_SET			38
+#define CS_AMBIENT_SET			37
 
 #define CS_SIEGE_STATE			(CS_AMBIENT_SET+MAX_AMBIENT_SETS)
 #define CS_SIEGE_OBJECTIVES		(CS_SIEGE_STATE+1)
@@ -118,8 +123,7 @@ Ghoul2 Insert End
 #define CS_TERRAINS				(CS_LIGHT_STYLES + (MAX_LIGHT_STYLES*3))
 #define CS_BSP_MODELS			(CS_TERRAINS + MAX_TERRAINS)
 
-//#define CS_MAX					(CS_BSP_MODELS + MAX_SUB_BSP)+1
-#define CS_MAX					(CS_BSP_MODELS)+1
+#define CS_MAX					(CS_BSP_MODELS + MAX_SUB_BSP)
 
 #if (CS_MAX) > MAX_CONFIGSTRINGS
 #error overflow: (CS_MAX) > MAX_CONFIGSTRINGS
@@ -141,12 +145,10 @@ typedef enum {
 
 #define MAX_CUSTOM_SIEGE_SOUNDS 30
 
-#include "../namespace_begin.h"
 extern const char *bg_customSiegeSoundNames[MAX_CUSTOM_SIEGE_SOUNDS];
 
 extern const char *bgToggleableSurfaces[BG_NUM_TOGGLEABLE_SURFACES];
 extern const int bgToggleableSurfaceDebris[BG_NUM_TOGGLEABLE_SURFACES];
-#include "../namespace_end.h"
 
 typedef enum {
 	HANDEXTEND_NONE = 0,
@@ -197,18 +199,15 @@ typedef enum {
 	GT_CTF,				// capture the flag
 	GT_CTY,
 	GT_MAX_GAME_TYPE
-};
-typedef int gametype_t;
+} gametype_t;
 
 typedef enum { GENDER_MALE, GENDER_FEMALE, GENDER_NEUTER } gender_t;
 
 extern vec3_t WP_MuzzlePoint[WP_NUM_WEAPONS];
 
-#include "../namespace_begin.h"
 extern int forcePowerSorted[NUM_FORCE_POWERS];
-#include "../namespace_end.h"
 
-typedef enum
+typedef enum saberLockType_e
 {
 	SABERLOCK_TOP,
 	SABERLOCK_SIDE,
@@ -217,15 +216,15 @@ typedef enum
 	SABERLOCK_SUPERBREAK,
 	SABERLOCK_WIN,
 	SABERLOCK_LOSE
-};
+} saberLockType_t;
 
-typedef enum
+typedef enum direction_e
 {
 	DIR_RIGHT,
 	DIR_LEFT,
 	DIR_FRONT,
 	DIR_BACK
-};
+} direction_t;
 
 /*
 ===================================================================================
@@ -249,13 +248,10 @@ typedef struct animation_s {
 } animation_t;
 #pragma pack(pop)
 
-#include "../namespace_begin.h"
 extern qboolean			BGPAFtextLoaded;
 extern animation_t		bgHumanoidAnimations[MAX_TOTALANIMATIONS];
-#include "../namespace_end.h"
 
-//#define MAX_ANIM_FILES	16
-#define MAX_ANIM_FILES	6	// I know that I had this number smaller once!
+#define MAX_ANIM_FILES	16
 #define MAX_ANIM_EVENTS 300
 
 typedef enum
@@ -267,7 +263,7 @@ typedef enum
 	NUM_FOOTSTEP_TYPES
 } footstepType_t;
 
-extern stringID_table_t animEventTypeTable[];
+extern stringID_table_t animEventTypeTable[MAX_ANIM_EVENTS+1];
 extern stringID_table_t footstepTypeTable[NUM_FOOTSTEP_TYPES+1];
 
 //size of Anim eventData array...
@@ -295,6 +291,14 @@ extern stringID_table_t footstepTypeTable[NUM_FOOTSTEP_TYPES+1];
 #define	AED_MOVE_FWD				0
 #define	AED_MOVE_RT					1
 #define	AED_MOVE_UP					2
+//indices for AEV_SABER_SWING data
+#define	AED_SABER_SWING_SABERNUM	0
+#define	AED_SABER_SWING_TYPE		1
+#define	AED_SABER_SWING_PROBABILITY	2
+//indices for AEV_SABER_SPIN data
+#define	AED_SABER_SPIN_SABERNUM		0
+#define	AED_SABER_SPIN_TYPE			1	//0 = saberspinoff, 1 = saberspin, 2-4 = saberspin1-saberspin3
+#define	AED_SABER_SPIN_PROBABILITY	2	
 
 typedef enum
 {//NOTENOTE:  Be sure to update animEventTypeTable and ParseAnimationEvtBlock(...) if you change this enum list!
@@ -305,6 +309,8 @@ typedef enum
 	AEV_FIRE,		//# animID AEV_FIRE framenum altfire chancetofire
 	AEV_MOVE,		//# animID AEV_MOVE framenum forwardpush rightpush uppush
 	AEV_SOUNDCHAN,  //# animID AEV_SOUNDCHAN framenum CHANNEL soundpath randomlow randomhi chancetoplay 
+	AEV_SABER_SWING,  //# animID AEV_SABER_SWING framenum CHANNEL randomlow randomhi chancetoplay 
+	AEV_SABER_SPIN,  //# animID AEV_SABER_SPIN framenum CHANNEL chancetoplay 
 	AEV_NUM_AEV
 } animEventType_t;
 
@@ -333,7 +339,6 @@ typedef struct
 	qboolean		eventsParsed;
 } bgLoadedEvents_t;
 
-#include "../namespace_begin.h"
 
 extern bgLoadedAnim_t bgAllAnims[MAX_ANIM_FILES];
 
@@ -348,7 +353,6 @@ extern bgLoadedEvents_t bgAllEvents[MAX_ANIM_FILES];
 extern int bgNumAnimEvents;
 #endif
 
-#include "../namespace_end.h"
 
 typedef enum {
 	PM_NORMAL,		// can accelerate and turn
@@ -373,7 +377,7 @@ typedef enum {
 } weaponstate_t;
 
 
-typedef enum {
+typedef enum forceMasteries_e {
 	FORCE_MASTERY_UNINITIATED,
 	FORCE_MASTERY_INITIATE,
 	FORCE_MASTERY_PADAWAN,
@@ -383,14 +387,12 @@ typedef enum {
 	FORCE_MASTERY_JEDI_KNIGHT,
 	FORCE_MASTERY_JEDI_MASTER,
 	NUM_FORCE_MASTERY_LEVELS
-};
+} forceMasteries_t;
 
-#include "../namespace_begin.h"
 extern char *forceMasteryLevels[NUM_FORCE_MASTERY_LEVELS];
 extern int forceMasteryPoints[NUM_FORCE_MASTERY_LEVELS];
 
 extern int bgForcePowerCost[NUM_FORCE_POWERS][NUM_FORCE_POWER_LEVELS];
-#include "../namespace_end.h"
 
 // pmove->pm_flags
 #define	PMF_DUCKED			1
@@ -423,7 +425,11 @@ typedef struct bgEntity_s
 	vec3_t			modelScale; //needed for g2 collision
 
 	//Data type(s) must directly correspond to the head of the gentity and centity structures
-} bgEntity_t;
+#if defined(__GCC__) || defined(MINGW32) || defined(MACOS_X)
+	} _bgEntity_t;
+#else
+	} bgEntity_t;
+#endif
 
 typedef struct {
 	// state (in / out)
@@ -484,7 +490,6 @@ typedef struct {
 	int			entSize; //size of the struct (gentity_t or centity_t) so things can be dynamic
 } pmove_t;
 
-#include "../namespace_begin.h"
 
 extern	pmove_t		*pm;
 
@@ -503,7 +508,6 @@ extern	pmove_t		*pm;
 void PM_UpdateViewAngles( playerState_t *ps, const usercmd_t *cmd );
 void Pmove (pmove_t *pmove);
 
-#include "../namespace_end.h"
 
 //===================================================================================
 
@@ -645,12 +649,12 @@ typedef enum {
 typedef enum {
 	PW_NONE,
 
-	PW_QUAD,
-	PW_BATTLESUIT,
+	#ifdef BASE_COMPAT
+		PW_QUAD,
+		PW_BATTLESUIT,
+	#endif // BASE_COMPAT
+
 	PW_PULL,
-	//PW_INVIS, //rww - removed
-	//PW_REGEN, //rww - removed
-	//PW_FLIGHT, //rww - removed
 
 	PW_REDFLAG,
 	PW_BLUEFLAG,
@@ -658,10 +662,6 @@ typedef enum {
 
 	PW_SHIELDHIT,
 
-	//PW_SCOUT, //rww - removed
-	//PW_GUARD, //rww - removed
-	//PW_DOUBLER, //rww - removed
-	//PW_AMMOREGEN, //rww - removed
 	PW_SPEEDBURST,
 	PW_DISINT_4,
 	PW_SPEED,
@@ -673,8 +673,7 @@ typedef enum {
 
 	PW_NUM_POWERUPS
 
-};
-typedef int powerup_t;
+} powerup_t;
 
 typedef enum {
 	HI_NONE,
@@ -693,8 +692,7 @@ typedef enum {
 	HI_CLOAK,
 
 	HI_NUM_HOLDABLE
-};
-typedef int holdable_t;
+} holdable_t;
 
 
 typedef enum {
@@ -859,9 +857,10 @@ typedef enum {
 	EV_DEATH3,
 	EV_OBITUARY,
 
-	EV_POWERUP_QUAD,
-	EV_POWERUP_BATTLESUIT,
-	//EV_POWERUP_REGEN,
+	#ifdef BASE_COMPAT
+		EV_POWERUP_QUAD,
+		EV_POWERUP_BATTLESUIT,
+	#endif // BASE_COMPAT
 
 	EV_FORCE_DRAINED,
 
@@ -1006,8 +1005,7 @@ typedef enum {
 	TEAM_SPECTATOR,
 
 	TEAM_NUM_TEAMS
-};
-typedef int team_t;
+} team_t;
 
 typedef enum {
 	DUELTEAM_FREE,
@@ -1105,8 +1103,7 @@ typedef enum {
 							// EFX: rotate + bob
 	IT_PERSISTANT_POWERUP,
 	IT_TEAM
-};
-typedef int itemType_t;
+} itemType_t;
 
 #define MAX_ITEM_MODELS 4
 
@@ -1129,7 +1126,6 @@ typedef struct gitem_s {
 } gitem_t;
 
 // included in both the game dll and the client
-#include "../namespace_begin.h"
 
 extern	gitem_t	bg_itemlist[];
 extern	int		bg_numItems;
@@ -1144,7 +1140,6 @@ gitem_t	*BG_FindItemForHoldable( holdable_t pw );
 
 qboolean	BG_CanItemBeGrabbed( int gametype, const entityState_t *ent, const playerState_t *ps );
 
-#include "../namespace_end.h"
 
 
 #define SABER_BLOCK_DUR 150		// number of milliseconds a block animation should take.
@@ -1203,69 +1198,6 @@ typedef enum {
 							// this avoids having to set eFlags and eventNum
 } entityType_t;
 
-
-
-
-//
-// fields are needed for spawning from the entity string
-//
-//I moved these from g_spawn.c because the entity parsing stuff is semi-shared now -rww
-#undef _GAME_SIDE
-
-#ifdef QAGAME
-#define _GAME_SIDE
-#elif defined CGAME
-#define _GAME_SIDE
-#endif
-
-#ifdef _GAME_SIDE
-typedef enum {
-	F_INT, 
-	F_FLOAT,
-	F_LSTRING,			// string on disk, pointer in memory, TAG_LEVEL
-	F_GSTRING,			// string on disk, pointer in memory, TAG_GAME
-	F_VECTOR,
-	F_ANGLEHACK,
-	F_ENTITY,			// index on disk, pointer in memory
-	F_ITEM,				// index on disk, pointer in memory
-	F_CLIENT,			// index on disk, pointer in memory
-	F_PARM1,			// Special case for parms
-	F_PARM2,			// Special case for parms
-	F_PARM3,			// Special case for parms
-	F_PARM4,			// Special case for parms
-	F_PARM5,			// Special case for parms
-	F_PARM6,			// Special case for parms
-	F_PARM7,			// Special case for parms
-	F_PARM8,			// Special case for parms
-	F_PARM9,			// Special case for parms
-	F_PARM10,			// Special case for parms
-	F_PARM11,			// Special case for parms
-	F_PARM12,			// Special case for parms
-	F_PARM13,			// Special case for parms
-	F_PARM14,			// Special case for parms
-	F_PARM15,			// Special case for parms
-	F_PARM16,			// Special case for parms
-	F_IGNORE
-} fieldtype_t;
-
-
-
-
-typedef struct
-{
-	char	*name;
-	int		ofs;
-	fieldtype_t	type;
-	int		flags;
-} BG_field_t;
-
-
-
-#endif
-
-
-
-
 // Okay, here lies the much-dreaded Pat-created FSM movement chart...  Heretic II strikes again!
 // Why am I inflicting this on you?  Well, it's better than hardcoded states.
 // Ideally this will be replaced with an external file or more sophisticated move-picker
@@ -1278,6 +1210,8 @@ typedef struct
 #endif
 
 typedef enum {
+	//totally invalid
+	LS_INVALID	= -1,
 	// Invalid, or saber not armed
 	LS_NONE		= 0,
 
@@ -1467,8 +1401,7 @@ typedef enum {
 	LS_REFLECT_LL,
 
 	LS_MOVE_MAX//
-};
-typedef int saberMoveName_t;
+} saberMoveName_t;
 
 typedef enum {
 	Q_BR,
@@ -1496,7 +1429,6 @@ typedef struct
 	qboolean trailLength;
 } saberMoveData_t;
 
-#include "../namespace_begin.h"
 
 extern saberMoveData_t	saberMoveData[LS_MOVE_MAX];
 
@@ -1504,7 +1436,6 @@ bgEntity_t *PM_BGEntForNum( int num );
 qboolean BG_KnockDownable(playerState_t *ps);
 qboolean BG_LegalizedForcePowers(char *powerOut, int maxRank, qboolean freeSaber, int teamForce, int gametype, int fpDisabled);
 
-#include "../namespace_end.h"
 
 #ifdef __LCC__ //can't inline it then, it is declared over in bg_misc in this case
 void BG_GiveMeVectorFromMatrix(mdxaBone_t *boltMatrix, int flags, vec3_t vec);
@@ -1553,7 +1484,6 @@ static ID_INLINE void BG_GiveMeVectorFromMatrix(mdxaBone_t *boltMatrix, int flag
 }
 #endif
 
-#include "../namespace_begin.h"
 
 void BG_IK_MoveArm(void *ghoul2, int lHandBolt, int time, entityState_t *ent, int basePose, vec3_t desiredPos, qboolean *ikInProgress,
 					 vec3_t origin, vec3_t angles, vec3_t scale, int blendTime, qboolean forceHalt);
@@ -1596,7 +1526,7 @@ qboolean BG_InDeathAnim( int anim );
 qboolean BG_InSaberLockOld( int anim );
 qboolean BG_InSaberLock( int anim );
 
-void BG_SaberStartTransAnim( int saberAnimLevel, int anim, float *animSpeed, int broken );
+void BG_SaberStartTransAnim( int clientNum, int saberAnimLevel, int weapon, int anim, float *animSpeed, int broken );
 
 void BG_ForcePowerDrain( playerState_t *ps, forcePowers_t forcePower, int overrideAmt );
 
@@ -1650,13 +1580,13 @@ float BG_SI_LengthMax(saberInfo_t *saber);
 void BG_SI_ActivateTrail ( saberInfo_t *saber, float duration );
 void BG_SI_DeactivateTrail ( saberInfo_t *saber, float duration );
 extern void BG_AttachToRancor( void *ghoul2,float rancYaw,vec3_t rancOrigin,int time,qhandle_t *modelList,vec3_t modelScale,qboolean inMouth,vec3_t out_origin,vec3_t out_angles,vec3_t out_axis[3] );
+void BG_ClearRocketLock( playerState_t *ps );
 
 extern int WeaponReadyAnim[WP_NUM_WEAPONS];
 extern int WeaponAttackAnim[WP_NUM_WEAPONS];
 
 extern int forcePowerDarkLight[NUM_FORCE_POWERS];
 
-#include "../namespace_end.h"
 
 #define ARENAS_PER_TIER		4
 #define MAX_ARENAS			1024

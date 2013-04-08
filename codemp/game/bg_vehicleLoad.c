@@ -7,19 +7,17 @@
 #endif
 
 #ifdef _JK2MP
-	#include "q_shared.h"
+	#include "qcommon/q_shared.h"
 	#include "bg_public.h"
 	#include "bg_vehicles.h"
 	#include "bg_weapons.h"
 
 	//Could use strap stuff but I don't particularly care at the moment anyway.
-#include "../namespace_begin.h"
 	extern int	trap_FS_FOpenFile( const char *qpath, fileHandle_t *f, fsMode_t mode );
 	extern void	trap_FS_Read( void *buffer, int len, fileHandle_t f );
 	extern void	trap_FS_Write( const void *buffer, int len, fileHandle_t f );
 	extern void	trap_FS_FCloseFile( fileHandle_t f );
 	extern int	trap_FS_GetFileList(  const char *path, const char *extension, char *listbuf, int bufsize );
-#include "../namespace_end.h"
 #else
 	#include "g_local.h"
 	#define QAGAME
@@ -30,13 +28,13 @@
 #ifndef QAGAME
 #ifndef CGAME
 #define WE_ARE_IN_THE_UI
-#include "../ui/ui_local.h"
+#include "ui/ui_local.h"
 #endif
 #endif
 #endif
 
 #ifndef _JK2MP
-#include "..\Ratl\string_vs.h"
+#include "Ratl/string_vs.h"
 #endif
 
 #ifdef QAGAME
@@ -47,34 +45,29 @@ extern int G_SoundIndex( const char *name );
 		extern int G_EffectIndex( const char *name );
 	#endif
 #elif CGAME
-#include "../namespace_begin.h"
 extern qhandle_t	trap_R_RegisterModel( const char *name );			// returns rgb axis if not found
 extern qhandle_t	trap_R_RegisterSkin( const char *name );			// returns all white if not found
 extern qhandle_t	trap_R_RegisterShader( const char *name );
 extern qhandle_t	trap_R_RegisterShaderNoMip( const char *name );
 extern int			trap_FX_RegisterEffect(const char *file);
 extern sfxHandle_t	trap_S_RegisterSound( const char *sample);		// returns buzz if not found
-#include "../namespace_end.h"
 #else//UI
-#include "../namespace_begin.h"
 extern qhandle_t	trap_R_RegisterModel( const char *name );			// returns rgb axis if not found
 extern qhandle_t	trap_R_RegisterSkin( const char *name );			// returns all white if not found
 extern qhandle_t	trap_R_RegisterShader( const char *name );			// returns all white if not found
 extern qhandle_t	trap_R_RegisterShaderNoMip( const char *name );			// returns all white if not found
 extern sfxHandle_t	trap_S_RegisterSound( const char *sample);		// returns buzz if not found
-#include "../namespace_end.h"
 #endif
 
 extern stringID_table_t animTable [MAX_ANIMATIONS+1];
 
 // These buffers are filled in with the same contents and then just read from in
 // a few places. We only need one copy on Xbox.
-#define MAX_VEH_WEAPON_DATA_SIZE 0x2000
-#define MAX_VEHICLE_DATA_SIZE 0xA000
+#define MAX_VEH_WEAPON_DATA_SIZE 0x40000 //Raz: was 0x4000
+#define MAX_VEHICLE_DATA_SIZE 0x100000 //Raz: was 0x10000
 
-#if !defined(_XBOX) || defined(QAGAME)
-	char	VehWeaponParms[MAX_VEH_WEAPON_DATA_SIZE];
-	char	VehicleParms[MAX_VEHICLE_DATA_SIZE];
+char	VehWeaponParms[MAX_VEH_WEAPON_DATA_SIZE];
+char	VehicleParms[MAX_VEHICLE_DATA_SIZE];
 
 void BG_ClearVehicleParseParms(void)
 {
@@ -83,13 +76,8 @@ void BG_ClearVehicleParseParms(void)
 	VehicleParms[0] = 0;
 }
 
-#else
-	extern char VehWeaponParms[MAX_VEH_WEAPON_DATA_SIZE];
-	extern char VehicleParms[MAX_VEHICLE_DATA_SIZE];
-#endif
 
 #ifdef _JK2MP
-#include "../namespace_begin.h"
 #endif
 
 #ifndef WE_ARE_IN_THE_UI
@@ -107,16 +95,6 @@ vehicleInfo_t g_vehicleInfo[MAX_VEHICLES];
 int		numVehicles = 0;//first one is null/default
 
 void BG_VehicleLoadParms( void );
-
-
-void BG_ClearVehicleLoadInfo(void)
-{
-	numVehicleWeapons = 1;
-	numVehicles = 0;
-	memset(g_vehWeaponInfo, 0, sizeof(g_vehWeaponInfo));
-	memset(g_vehicleInfo, 0, sizeof(g_vehicleInfo));
-}
-
 
 typedef enum {
 	VF_IGNORE,
@@ -161,6 +139,7 @@ vehField_t vehWeaponFields[NUM_VWEAP_PARMS] =
 	{"loopSound", VWFOFS(iLoopSound), VF_SOUND_CLIENT},	//index of loopSound
 	{"speed", VWFOFS(fSpeed), VF_FLOAT},		//speed of projectile/range of traceline
 	{"homing", VWFOFS(fHoming), VF_FLOAT},		//0.0 = not homing, 0.5 = half vel to targ, half cur vel, 1.0 = all vel to targ
+	{"homingFOV", VWFOFS(fHomingFOV), VF_FLOAT},//missile will lose lock on if DotProduct of missile direction and direction to target ever drops below this (-1 to 1, -1 = never lose target, 0 = lose if ship gets behind missile, 1 = pretty much will lose it's target right away)
 	{"lockOnTime", VWFOFS(iLockOnTime), VF_INT},	//0 = no lock time needed, else # of ms needed to lock on
 	{"damage", VWFOFS(iDamage), VF_INT},		//damage done when traceline or projectile directly hits target
 	{"splashDamage", VWFOFS(iSplashDamage), VF_INT},//damage done to ents in splashRadius of end of traceline or projectile origin on impact
@@ -685,7 +664,7 @@ stringID_table_t VehicleTable[VH_NUM_VEHICLES+1] =
 	ENUM2STRING(VH_SPEEDER),	//something you ride on that hovers, like a speeder or swoop
 	ENUM2STRING(VH_ANIMAL),		//animal you ride on top of that walks, like a tauntaun
 	ENUM2STRING(VH_FLIER),		//animal you ride on top of that flies, like a giant mynoc?
-	0,	-1
+	{0,	-1}
 };
 
 // Setup the shared functions (one's that all vehicles would generally use).
@@ -710,6 +689,8 @@ void BG_SetSharedVehicleFunctions( vehicleInfo_t *pVehInfo )
 			break;
 		case VH_WALKER:
 			G_SetWalkerVehicleFunctions( pVehInfo );
+			break;
+		default:
 			break;
 	}
 #endif
@@ -1348,6 +1329,7 @@ int VEH_LoadVehicle( const char *vehicleName )
 	G_SoundIndex( "sound/vehicles/common/release.wav" );
 #elif CGAME
 	trap_R_RegisterShader( "gfx/menus/radar/bracket" );
+	trap_R_RegisterShader( "gfx/menus/radar/lead" );
 	trap_R_RegisterShaderNoMip( "gfx/menus/radar/asteroid" );
 	trap_S_RegisterSound( "sound/vehicles/common/impactalarm.wav" );
 	trap_S_RegisterSound( "sound/vehicles/common/linkweaps.wav" );
@@ -1672,7 +1654,6 @@ void AttachRidersGeneric( Vehicle_t *pVeh )
 }
 #endif
 
-#include "../namespace_end.h"
 
 #endif // _JK2MP
 

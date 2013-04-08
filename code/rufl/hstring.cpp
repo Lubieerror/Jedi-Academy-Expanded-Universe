@@ -53,13 +53,6 @@ TStrPool&	Pool()
 
 
 #ifdef _XBOX
-
-// Utility for clearing the pool between levels
-void ClearHStringPool( void )
-{
-	Pool().clear();
-}
-
 namespace dllNamespace
 {
 #endif

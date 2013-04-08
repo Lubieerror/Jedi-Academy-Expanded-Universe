@@ -1,5 +1,5 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 // Interpreted Block Stream Functions
 //
@@ -637,21 +637,12 @@ int CBlockStream::ReadBlock( CBlock *get )
 
 	// Stream blocks are generally temporary as they
 	// are just used in an initial parsing phase...
-#ifdef _XBOX
-	extern void Z_SetNewDeleteTemporary(bool bTemp);
-	Z_SetNewDeleteTemporary(true);
-#endif
-
 	while ( numMembers-- > 0)
 	{	
 		bMember = new CBlockMember;
 		bMember->ReadMember( &m_stream, &m_streamPos );
 		get->AddMember( bMember );
 	}
-
-#ifdef _XBOX
-	Z_SetNewDeleteTemporary(false);
-#endif
 
 	return true;
 }

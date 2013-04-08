@@ -6,30 +6,18 @@
  *****************************************************************************/
 
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
-#include "../client/client.h"
-//#include "../zlib32/zip.h"
+#include "client/client.h"
+//#include "zlib32/zip.h"
 //#include "unzip.h"
 #include "files.h"
 
-//#include <windows.h> //rww - included to make fs_copyfiles 2 related functions happy.
 #include "platform.h"
 
 // TTimo - https://zerowing.idsoftware.com/bugzilla/show_bug.cgi?id=540
 // wether we did a reorder on the current search path when joining the server
 static qboolean fs_reordered;
-
-// productId: This file is copyright 2003 Raven Software, and may not be duplicated except during a licensed installation of the full commercial version of Star Wars: Jedi Academy
-static const byte fs_scrambledProductId[] = {
-42, 143, 149, 190,  10, 197, 225, 133, 243,  63, 189, 182, 226,  56, 143,  17, 215,  37, 197, 218,  50, 103,  24, 235, 246, 191, 183, 149, 160, 170,
-230,  52, 176, 231,  15, 194, 236, 247, 159, 168, 132, 154,  24, 133,  67,  85,  36,  97,  99,  86, 117, 189, 212, 156, 236, 153,  68,  10, 196, 241,
-39, 219, 156,  88,  93, 198, 200, 232, 142,  67,  45, 209,  53, 186, 228, 241, 162, 127, 213,  83,   7, 121,  11,  93, 123, 243, 148, 240, 229,  42,
-42,   6, 215, 239, 112, 120, 240, 244, 104,  12,  38,  47, 201, 253, 223, 208, 154,  69, 141, 157,  32, 117, 166, 146, 236,  59,  15, 223,  52,  89,
-133,  64, 201,  56, 119,  25, 211, 152, 159,  11,  92,  59, 207,  81, 123,   0, 121, 241, 116,  42,  36, 251,  51, 149,  79, 165,  12, 106, 187, 225,
-203,  99, 102,  69,  97,  81,  27, 107,  81, 178,  63,  35, 185,  64, 115 
-};
-
 
 /*
 =================
@@ -54,7 +42,6 @@ qboolean FS_PakIsPure( pack_t *pack ) {
 	}
 	return qtrue;
 }
-
 
 /*
 ================
@@ -83,7 +70,7 @@ static long FS_HashFileName( const char *fname, int hashSize ) {
 
 
 static FILE	*FS_FileForHandle( fileHandle_t f ) {
-	if ( f < 0 || f > MAX_FILE_HANDLES ) {
+	if ( f < 1 || f >= MAX_FILE_HANDLES ) {
 		Com_Error( ERR_DROP, "FS_FileForHandle: out of reange" );
 	}
 	if (fsh[f].zipFile == qtrue) {
@@ -137,6 +124,7 @@ Creates any directories needed to store the given filename
 */
 qboolean FS_CreatePath (char *OSPath) {
 	char	*ofs;
+	char	path[MAX_OSPATH];
 	
 	// make absolutely sure that it can't back up the path
 	// FIXME: is c: allowed???
@@ -145,11 +133,21 @@ qboolean FS_CreatePath (char *OSPath) {
 		return qtrue;
 	}
 
-	for (ofs = OSPath+1 ; *ofs ; ofs++) {
-		if (*ofs == PATH_SEP) {	
+	Q_strncpyz( path, OSPath, sizeof( path ) );
+	FS_ReplaceSeparators( path );
+
+	// Skip creation of the root directory as it will always be there
+	ofs = strchr( path, PATH_SEP );
+	ofs++;
+
+	for (; ofs != NULL && *ofs ; ofs++) {
+		if (*ofs == PATH_SEP) {
 			// create the directory
 			*ofs = 0;
-			Sys_Mkdir (OSPath);
+			if (!Sys_Mkdir (path)) {
+				Com_Error( ERR_FATAL, "FS_CreatePath: failed to create path \"%s\"",
+					path );
+			}
 			*ofs = PATH_SEP;
 		}
 	}
@@ -212,6 +210,17 @@ FS_Remove
 */
 void FS_Remove( const char *osPath ) {
 	remove( osPath );
+}
+
+/*
+===========
+FS_HomeRemove
+
+===========
+*/
+void FS_HomeRemove( const char *homePath ) {
+	remove( FS_BuildOSPath( fs_homepath->string,
+			fs_gamedir, homePath ) );
 }
 
 /*
@@ -337,47 +346,47 @@ int FS_SV_FOpenFileRead( const char *filename, fileHandle_t *fp ) {
 
 	fsh[f].handleFiles.file.o = fopen( ospath, "rb" );
 	fsh[f].handleSync = qfalse;
-  if (!fsh[f].handleFiles.file.o)
-  {
-    // NOTE TTimo on non *nix systems, fs_homepath == fs_basepath, might want to avoid
-    if (Q_stricmp(fs_homepath->string,fs_basepath->string))
-    {
-      // search basepath
-      ospath = FS_BuildOSPath( fs_basepath->string, filename, "" );
-      ospath[strlen(ospath)-1] = '\0';
+	if (!fsh[f].handleFiles.file.o)
+	{
+		// NOTE TTimo on non *nix systems, fs_homepath == fs_basepath, might want to avoid
+		if (Q_stricmp(fs_homepath->string,fs_basepath->string))
+		{
+			// search basepath
+			ospath = FS_BuildOSPath( fs_basepath->string, filename, "" );
+			ospath[strlen(ospath)-1] = '\0';
 
-      if ( fs_debug->integer )
-      {
-        Com_Printf( "FS_SV_FOpenFileRead (fs_basepath): %s\n", ospath );
-      }
+			if ( fs_debug->integer )
+			{
+				Com_Printf( "FS_SV_FOpenFileRead (fs_basepath): %s\n", ospath );
+			}
 
-      fsh[f].handleFiles.file.o = fopen( ospath, "rb" );
-      fsh[f].handleSync = qfalse;
+			fsh[f].handleFiles.file.o = fopen( ospath, "rb" );
+			fsh[f].handleSync = qfalse;
 
-      if ( !fsh[f].handleFiles.file.o )
-      {
-        f = 0;
-      }
-    }
-  }
+			if ( !fsh[f].handleFiles.file.o )
+			{
+				f = 0;
+			}
+		}
+	}
 
 	if (!fsh[f].handleFiles.file.o) {
-    // search cd path
-    ospath = FS_BuildOSPath( fs_cdpath->string, filename, "" );
-    ospath[strlen(ospath)-1] = '\0';
+		// search cd path
+		ospath = FS_BuildOSPath( fs_cdpath->string, filename, "" );
+		ospath[strlen(ospath)-1] = '\0';
 
-    if (fs_debug->integer)
-    {
-      Com_Printf( "FS_SV_FOpenFileRead (fs_cdpath) : %s\n", ospath );
-    }
+		if (fs_debug->integer)
+		{
+			Com_Printf( "FS_SV_FOpenFileRead (fs_cdpath) : %s\n", ospath );
+		}
 
-	  fsh[f].handleFiles.file.o = fopen( ospath, "rb" );
-	  fsh[f].handleSync = qfalse;
+		fsh[f].handleFiles.file.o = fopen( ospath, "rb" );
+		fsh[f].handleSync = qfalse;
 
-	  if( !fsh[f].handleFiles.file.o ) {
-	    f = 0;
-	  }
-  }
+		if( !fsh[f].handleFiles.file.o ) {
+			f = 0;
+		}
+	}
   
 	*fp = f;
 	if (f) {
@@ -563,6 +572,8 @@ fileHandle_t FS_FOpenFileAppend( const char *filename ) {
 	return f;
 }
 
+#ifndef __linux__
+
 bool Sys_GetFileTime(LPCSTR psFileName, FILETIME &ft)
 {
 	bool bSuccess = false;
@@ -604,7 +615,7 @@ bool Sys_FileOutOfDate( LPCSTR psFinalFileName /* dest */, LPCSTR psDataFileName
 		// timer res only accurate to within 2 seconds on FAT, so can't do exact compare...
 		//
 		//LONG l = CompareFileTime( &ftFinalFile, &ftDataFile );
-		if (  (abs(ftFinalFile.dwLowDateTime - ftDataFile.dwLowDateTime) <= 20000000 ) &&
+		if (  (abs((double)(ftFinalFile.dwLowDateTime - ftDataFile.dwLowDateTime)) <= 20000000 ) &&
 				  ftFinalFile.dwHighDateTime == ftDataFile.dwHighDateTime				
 			)
 		{
@@ -627,6 +638,8 @@ bool Sys_FileOutOfDate( LPCSTR psFinalFileName /* dest */, LPCSTR psDataFileName
 	return false;
 }
 
+#endif // !__linux__
+
 bool FS_FileCacheable(const char* const filename) 
 {
 	extern	cvar_t	*com_buildScript;
@@ -642,7 +655,7 @@ bool FS_FileCacheable(const char* const filename)
 FS_ShiftedStrStr
 ===========
 */
-char *FS_ShiftedStrStr(const char *string, const char *substring, int shift) {
+const char *FS_ShiftedStrStr(const char *string, const char *substring, int shift) {
 	char buf[MAX_STRING_TOKENS];
 	int i;
 
@@ -691,7 +704,7 @@ int FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean uniqueF
 		Com_Error( ERR_FATAL, "FS_FOpenFileRead: NULL 'filename' parameter passed\n" );
 	}
 
-	Com_sprintf (demoExt, sizeof(demoExt), ".dm_%d",PROTOCOL_VERSION );
+	Com_sprintf (demoExt, sizeof(demoExt), ".dm_%d", PROTOCOL_VERSION );
 	// qpaths are not supposed to have a leading slash
 	if ( filename[0] == '/' || filename[0] == '\\' ) {
 		filename++;
@@ -862,7 +875,7 @@ int FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean uniqueF
 		  //   this test can make the search fail although the file is in the directory
 		  // I had the problem on https://zerowing.idsoftware.com/bugzilla/show_bug.cgi?id=8
 		  // turned out I used FS_FileExists instead
-				if ( fs_restrict->integer || fs_numServerPaks ) {
+				if ( fs_numServerPaks ) {
 
 					if ( Q_stricmp( filename + l - 4, ".cfg" )		// for config files
 						&& Q_stricmp( filename + l - 4, ".fcf" )	// force configuration files
@@ -890,7 +903,7 @@ int FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean uniqueF
 					&& Q_stricmp( filename + l - 4, ".dat" ) ) {	// for journal files
 					fs_fakeChkSum = random();
 				}
-				
+#ifndef __linux__				
 				// if running with fs_copyfiles 2, and search path == local, then we need to fail to open
 				//	if the time/date stamp != the network version (so it'll loop round again and use the network path,
 				//	which comes later in the search order)
@@ -905,14 +918,15 @@ int FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean uniqueF
 						continue;	//carry on to find the cdpath version.
 					}
 				}      
-
+#endif 
 				Q_strncpyz( fsh[*file].name, filename, sizeof( fsh[*file].name ) );
 				fsh[*file].zipFile = qfalse;
 				if ( fs_debug->integer ) {
-					Com_Printf( "FS_FOpenFileRead: %s (found in '%s/%s')\n", filename,
-						dir->path, dir->gamedir );
+					Com_Printf( "FS_FOpenFileRead: %s (found in '%s%c%s')\n", filename,
+						dir->path, PATH_SEP, dir->gamedir );
 				}
 
+#ifndef __linux__
 				// if we are getting it from the cdpath, optionally copy it
 				//  to the basepath
 				if ( fs_copyfiles->integer && !Q_stricmp( dir->path, fs_cdpath->string ) ) {
@@ -960,7 +974,7 @@ int FS_FOpenFileRead( const char *filename, fileHandle_t *file, qboolean uniqueF
 						break;
 					}
 				}
-
+#endif
 				if (bFasterToReOpenUsingNewLocalFile)
 				{
 					break;	// and re-read the local copy, not the net version
@@ -1675,8 +1689,8 @@ char **FS_ListFilteredFiles( const char *path, const char *extension, char *filt
 			char	*name;
 
 			// don't scan directories for files if we are pure or restricted
-			if ( (fs_restrict->integer || fs_numServerPaks) &&
-				 (!extension || Q_stricmp(extension, "fcf") || fs_restrict->integer) )
+			if ( fs_numServerPaks &&
+				 (!extension || Q_stricmp(extension, "fcf")) )
 			{
 				//rww - allow scanning for fcf files outside of pak even if pure
 			    continue;
@@ -2148,7 +2162,7 @@ void FS_Path_f( void ) {
 				}
 			}
 		} else {
-			Com_Printf ("%s/%s\n", s->dir->path, s->dir->gamedir );
+			Com_Printf ("%s%c%s\n", s->dir->path, PATH_SEP, s->dir->gamedir );
 		}
 	}
 
@@ -2309,6 +2323,23 @@ qboolean FS_idPak( char *pak, char *base ) {
 
 /*
 ================
+FS_CheckDirTraversal
+
+Check whether the string contains stuff like "../" to prevent directory traversal bugs
+and return qtrue if it does.
+================
+*/
+
+qboolean FS_CheckDirTraversal(const char *checkdir)
+{
+	if(strstr(checkdir, "../") || strstr(checkdir, "..\\"))
+		return qtrue;
+	
+	return qfalse;
+}
+
+/*
+================
 FS_ComparePaks
 
 if dlstring == qtrue
@@ -2333,7 +2364,8 @@ we are not interested in a download string format, we want something human-reada
 */
 qboolean FS_ComparePaks( char *neededpaks, int len, qboolean dlstring ) {
 	searchpath_t	*sp;
-	qboolean havepak, badchecksum;
+	qboolean havepak;
+	char *origpos = neededpaks;
 	int i;
 
 	if ( !fs_numServerReferencedPaks ) {
@@ -2344,11 +2376,17 @@ qboolean FS_ComparePaks( char *neededpaks, int len, qboolean dlstring ) {
 
 	for ( i = 0 ; i < fs_numServerReferencedPaks ; i++ ) {
 		// Ok, see if we have this pak file
-		badchecksum = qfalse;
 		havepak = qfalse;
 
 		// never autodownload any of the id paks
 		if ( FS_idPak(fs_serverReferencedPakNames[i], "base") || FS_idPak(fs_serverReferencedPakNames[i], "missionpack") ) {
+			continue;
+		}
+
+		// Make sure the server cannot make us write to non-quake3 directories.
+		if(FS_CheckDirTraversal(fs_serverReferencedPakNames[i]))
+		{
+			Com_Printf("WARNING: Invalid download name %s\n", fs_serverReferencedPakNames[i]);
 			continue;
 		}
 
@@ -2364,6 +2402,12 @@ qboolean FS_ComparePaks( char *neededpaks, int len, qboolean dlstring ) {
 			
 			if (dlstring)
 			{
+				// We need this to make sure we won't hit the end of the buffer or the server could
+				// overwrite non-pk3 files on clients by writing so much crap into neededpaks that
+				// Q_strcat cuts off the .pk3 extension.
+
+				origpos += strlen(origpos);
+
 				// Remote name
 				Q_strcat( neededpaks, len, "@");
 				Q_strcat( neededpaks, len, fs_serverReferencedPakNames[i] );
@@ -2381,6 +2425,14 @@ qboolean FS_ComparePaks( char *neededpaks, int len, qboolean dlstring ) {
 				} else {
 					Q_strcat( neededpaks, len, fs_serverReferencedPakNames[i] );
 					Q_strcat( neededpaks, len, ".pk3" );
+				}
+
+				// Find out whether it might have overflowed the buffer and don't add this file to the
+				// list if that is the case.
+				if(strlen(origpos) + (origpos - neededpaks) >= len - 1)
+				{
+					*origpos = '\0';
+					break;
 				}
 			}
 			else
@@ -2402,13 +2454,6 @@ qboolean FS_ComparePaks( char *neededpaks, int len, qboolean dlstring ) {
 
 	return qfalse; // We have them all
 }
-
-#ifdef USE_CD_KEY
-
-void Com_AppendCDKey( const char *filename );
-void Com_ReadCDKey( const char *filename );
-
-#endif // USE_CD_KEY
 
 //rww - add search paths in for received svc_setgame
 void FS_UpdateGamedir(void)
@@ -2477,9 +2522,6 @@ FS_Startup
 */
 void FS_Startup( const char *gameName ) {
         const char *homePath;
-#ifdef USE_CD_KEY
-	cvar_t	*fs;
-#endif	// USE_CD_KEY
 
 	Com_Printf( "----- FS_Startup -----\n" );
 
@@ -2494,7 +2536,6 @@ void FS_Startup( const char *gameName ) {
 	}
 	fs_homepath = Cvar_Get ("fs_homepath", homePath, CVAR_INIT );
 	fs_gamedirvar = Cvar_Get ("fs_game", "", CVAR_INIT|CVAR_SYSTEMINFO );
-	fs_restrict = Cvar_Get ("fs_restrict", "", CVAR_INIT );
 
 	fs_dirbeforepak = Cvar_Get("fs_dirbeforepak", "0", CVAR_INIT);
 
@@ -2537,14 +2578,6 @@ void FS_Startup( const char *gameName ) {
 		}
 	}
 
-#ifdef USE_CD_KEY
-	Com_ReadCDKey( "base" );
-	fs = Cvar_Get ("fs_game", "", CVAR_INIT|CVAR_SYSTEMINFO );
-	if (fs && fs->string[0] != 0) {
-		Com_AppendCDKey( fs->string );
-	}
-#endif // USE_CD_KEY
-
 	// add our commands
 	Cmd_AddCommand ("path", FS_Path_f);
 	Cmd_AddCommand ("dir", FS_Dir_f );
@@ -2568,67 +2601,6 @@ void FS_Startup( const char *gameName ) {
 	}
 #endif
 	Com_Printf( "%d files in pk3 files\n", fs_packFiles );
-}
-
-
-/*
-===================
-FS_SetRestrictions
-
-Looks for product keys and restricts media add on ability
-if the full version is not found
-===================
-*/
-void FS_SetRestrictions( void ) {
-	searchpath_t	*path;
-
-#ifndef PRE_RELEASE_DEMO
-	char	*productId;
-
-	// if fs_restrict is set, don't even look for the id file,
-	// which allows the demo release to be tested even if
-	// the full game is present
-	if ( !fs_restrict->integer ) {
-		// look for the full game id
-		FS_ReadFile( "productid.txt", (void **)&productId );
-		if ( productId ) {
-			// check against the hardcoded string
-			int		seed, i;
-
-			seed = 102270;
-			for ( i = 0 ; i < sizeof( fs_scrambledProductId ) ; i++ ) {
-				if ( ( fs_scrambledProductId[i] ^ (seed&255) ) != productId[i] ) {
-					break;
-				}
-				seed = (69069 * seed + 1);
-			}
-
-			FS_FreeFile( productId );
-
-			if ( i == sizeof( fs_scrambledProductId ) ) {
-				return;	// no restrictions
-			}
-			Com_Error( ERR_FATAL, "Invalid product identification" );
-		}
-	}
-#endif
-	Cvar_Set( "fs_restrict", "1" );
-
-	Com_Printf( "\nRunning in restricted demo mode.\n\n" );
-
-	// restart the filesystem with just the demo directory
-	FS_Shutdown(qfalse);
-	FS_Startup( DEMOGAME );
-
-	// make sure that the pak file has the header checksum we expect
-	for ( path = fs_searchpaths ; path ; path = path->next ) {
-		if ( path->pack ) {
-			// a tiny attempt to keep the checksum from being scannable from the exe
-			if ( (path->pack->checksum ^ 0x02261994u) != (DEMO_PAK_CHECKSUM ^ 0x02261994u) ) {
-				Com_Error( ERR_FATAL, "Corrupted pak0.pk3: %u", path->pack->checksum );
-			}
-		}
-	}
 }
 
 /*
@@ -2994,9 +2966,6 @@ void FS_Restart( int checksumFeed ) {
 	// try to start up normally
 	FS_Startup( BASEGAME );
 
-	// see if we are going to allow add-ons
-	FS_SetRestrictions();
-
 	// if we can't find default.cfg, assume that the paths are
 	// busted and error out now, rather than getting an unreadable
 	// graphics screen when the font fails to load
@@ -3006,10 +2975,9 @@ void FS_Restart( int checksumFeed ) {
 		if (lastValidBase[0]) {
 			FS_PureServerSetLoadedPaks("", "");
 			Cvar_Set("fs_basepath", lastValidBase);
-			Cvar_Set("fs_gamedirvar", lastValidGame);
+			Cvar_Set("fs_game", lastValidGame);
 			lastValidBase[0] = '\0';
 			lastValidGame[0] = '\0';
-			Cvar_Set( "fs_restrict", "0" );
 			FS_Restart(checksumFeed);
 			Com_Error( ERR_DROP, "Invalid game folder\n" );
 			return;
@@ -3041,10 +3009,24 @@ restart if necessary
 =================
 */
 qboolean FS_ConditionalRestart( int checksumFeed ) {
-	if( fs_gamedirvar->modified || checksumFeed != fs_checksumFeed ) {
-		FS_Restart( checksumFeed );
-		return qtrue;
+	if(fs_gamedirvar->modified)
+	{
+		if(FS_FilenameCompare(lastValidGame, fs_gamedirvar->string) &&
+				(*lastValidGame || FS_FilenameCompare(fs_gamedirvar->string, BASEGAME)) &&
+				(*fs_gamedirvar->string || FS_FilenameCompare(lastValidGame, BASEGAME)))
+		{
+			FS_Restart(checksumFeed);
+			//Cvar_Restart(qtrue);
+			return qtrue;
+		}
+		else
+			fs_gamedirvar->modified = qfalse;
 	}
+
+	if(checksumFeed != fs_checksumFeed)
+		FS_Restart(checksumFeed);
+	else if(fs_numServerPaks && !fs_reordered)
+		FS_ReorderPurePaks();
 	return qfalse;
 }
 

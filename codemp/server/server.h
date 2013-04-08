@@ -6,16 +6,10 @@
 #define SERVER_H_INC
 
 
-#include "../game/q_shared.h"
-#include "../qcommon/qcommon.h"
-#include "../game/g_public.h"
-#include "../game/bg_public.h"
-
-#ifdef _XBOX
-#include "../xbox/XBLive.h"
-#include "../xbox/XBoxCommon.h"
-#include "../xbox/XBVoice.h"
-#endif
+#include "qcommon/q_shared.h"
+#include "qcommon/qcommon.h"
+#include "game/g_public.h"
+#include "game/bg_public.h"
 
 //=============================================================================
 
@@ -29,19 +23,11 @@ typedef struct svEntity_s {
 	struct svEntity_s *nextEntityInWorldSector;
 	
 	entityState_t	baseline;		// for delta compression of initial sighting
-#ifdef _XBOX
-	signed char		numClusters;		// if -1, use headnode instead
-	short			clusternums[MAX_ENT_CLUSTERS];
-	short			lastCluster;		// if all the clusters don't fit in clusternums
-	short			areanum, areanum2;
-	char			snapshotCounter;	// used to prevent double adding from portal views
-#else
 	int			numClusters;		// if -1, use headnode instead
 	int			clusternums[MAX_ENT_CLUSTERS];
 	int			lastCluster;		// if all the clusters don't fit in clusternums
 	int			areanum, areanum2;
 	int			snapshotCounter;	// used to prevent double adding from portal views
-#endif
 } svEntity_t;
 
 typedef enum {
@@ -56,11 +42,7 @@ typedef struct {
 	int				serverId;			// changes each server start
 	int				restartedServerId;	// serverId before a map_restart
 	int				checksumFeed;		//
-#ifdef _XBOX
-	char			snapshotCounter;	// incremented for each snapshot built
-#else
 	int				snapshotCounter;	// incremented for each snapshot built
-#endif
 	int				timeResidual;		// <= 1000 / sv_frame->value
 	int				nextFrameTime;		// when time > nextFrameTime, process world
 	struct cmodel_s	*models[MAX_MODELS];
@@ -80,11 +62,9 @@ typedef struct {
 	int				restartTime;
 
 	//rwwRMG - added:
-/*
 	int				mLocalSubBSPIndex;
 	int				mLocalSubBSPModelOffset;
 	char			*mLocalSubBSPEntityParsePoint;
-*/
 
 	char			*mSharedMemory;
 } server_t;
@@ -146,7 +126,6 @@ typedef struct client_s {
 	char			name[MAX_NAME_LENGTH];			// extracted from userinfo, high bits masked
 
 	// downloading
-#ifndef _XBOX	// No downloads on Xbox
 	char			downloadName[MAX_QPATH]; // if not empty string, we are downloading
 	fileHandle_t	download;			// file being downloaded
  	int				downloadSize;		// total bytes (can't use EOF because of paks)
@@ -158,7 +137,6 @@ typedef struct client_s {
 	int				downloadBlockSize[MAX_DOWNLOAD_WINDOW];
 	qboolean		downloadEOF;		// We have sent the EOF block
 	int				downloadSendTime;	// time we last got an ack from the client
-#endif
 
 	int				deltaMessage;		// frame last client usercmd message
 	int				nextReliableTime;	// svs.time when another reliable command will be allowed
@@ -177,10 +155,6 @@ typedef struct client_s {
 	int				lastUserInfoChange; //if > svs.time && count > x, deny change -rww
 	int				lastUserInfoCount; //allow a certain number of changes within a certain time period -rww
 
-#ifdef _XBOX
-	int				refIndex;			// Copy of refIndex in xbOnlineInfo.xbPlayerList[]
-	qboolean		usePrivateSlot;		// Was this person eligble for a private slot when they joined?
-#endif
 } client_t;
 
 //=============================================================================
@@ -223,12 +197,6 @@ typedef struct {
 	netadr_t	redirectAddress;			// for rcon return messages
 
 	netadr_t	authorizeAddress;			// for rcon return messages
-
-#ifdef _XBOX
-	int			clientRefNum;				// Index into xbonlineinfo array
-
-	int			syslinkAdvertTime;			// Time of next system link SVC_Info packet
-#endif
 } serverStatic_t;
 
 //=============================================================================
@@ -263,10 +231,7 @@ extern	cvar_t	*sv_maxPing;
 extern	cvar_t	*sv_gametype;
 extern	cvar_t	*sv_pure;
 extern	cvar_t	*sv_floodProtect;
-extern	cvar_t	*sv_allowAnonymous;
 extern	cvar_t	*sv_needpass;
-extern	cvar_t	*xb_gameType;
-
 
 //===========================================================
 
@@ -322,14 +287,6 @@ void SV_ExecuteClientCommand( client_t *cl, const char *s, qboolean clientOK );
 void SV_ClientThink (client_t *cl, usercmd_t *cmd);
 
 void SV_WriteDownloadToClient( client_t *cl , msg_t *msg );
-
-// Need to broadcast info about clients on join/leave
-#ifdef _XBOX
-struct XBPlayerInfo;
-void SV_SendClientNewPeer(client_t* client, XBPlayerInfo* info);
-void SV_SendClientRemovePeer(client_t* client, int index);
-void SV_SendClientXbInfo(client_t *client);
-#endif
 
 //
 // sv_ccmds.c
@@ -438,6 +395,5 @@ void SV_ClipToEntity( trace_t *trace, const vec3_t start, const vec3_t mins, con
 void SV_Netchan_Transmit( client_t *client, msg_t *msg);	//int length, const byte *data );
 void SV_Netchan_TransmitNextFragment( netchan_t *chan );
 qboolean SV_Netchan_Process( client_t *client, msg_t *msg );
-
 
 #endif // SERVER_H_INC

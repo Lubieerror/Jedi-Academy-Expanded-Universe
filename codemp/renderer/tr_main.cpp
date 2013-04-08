@@ -1,20 +1,13 @@
 // tr_main.c -- main control flow for each frame
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 #include "tr_local.h"
-#include "../ghoul2/G2_local.h"
+#include "ghoul2/G2_local.h"
 // Yeah, this might be kind of bad, but no linux version is planned so far :-) - AReis
 // Gee- thanks guys - jdrews, the linux porter...
-#ifndef _XBOX
 #ifndef __linux__
-#include "../win32/glw_win.h"
-#endif 
-#endif
-
-#ifdef _XBOX
-#include "../cgame/cg_local.h"
-#include "../client/cl_data.h"
+	#include "win32/glw_win.h"
 #endif
 
 trGlobals_t		tr;
@@ -22,17 +15,10 @@ trGlobals_t		tr;
 static float	s_flipMatrix[16] = {
 	// convert from our coordinate system (looking down X)
 	// to OpenGL's coordinate system (looking down -Z)
-#if defined (_XBOX)
-	0, 0, 1, 0,
-	-1, 0, 0, 0,
-	0, 1, 0, 0,
-	0, 0, 0, 1
-#else
 	0, 0, -1, 0,
 	-1, 0, 0, 0,
 	0, 1, 0, 0,
 	0, 0, 0, 1
-#endif
 };
 
 void R_AddTerrainSurfaces(void);
@@ -520,27 +506,6 @@ void R_SetupProjection( void ) {
 	height = ymax - ymin;
 	depth = zFar - zNear;
 
-#if defined (_XBOX)
-	tr.viewParms.projectionMatrix[0] = 2 * zNear / width;
-	tr.viewParms.projectionMatrix[4] = 0;
-	tr.viewParms.projectionMatrix[8] = ( xmax + xmin ) / width;	// normally 0
-	tr.viewParms.projectionMatrix[12] = 0;
-
-	tr.viewParms.projectionMatrix[1] = 0;
-	tr.viewParms.projectionMatrix[5] = 2 * zNear / height;
-	tr.viewParms.projectionMatrix[9] = ( ymax + ymin ) / height;	// normally 0
-	tr.viewParms.projectionMatrix[13] = 0;
-
-	tr.viewParms.projectionMatrix[2] = 0;
-	tr.viewParms.projectionMatrix[6] = 0;
-	tr.viewParms.projectionMatrix[10] = ( zFar + zNear ) / depth;
-	tr.viewParms.projectionMatrix[14] = -2 * zFar * zNear / depth;
-
-	tr.viewParms.projectionMatrix[3] = 0;
-	tr.viewParms.projectionMatrix[7] = 0;
-	tr.viewParms.projectionMatrix[11] = 1;
-	tr.viewParms.projectionMatrix[15] = 0;
-#else
 	tr.viewParms.projectionMatrix[0] = 2 * zNear / width;
 	tr.viewParms.projectionMatrix[4] = 0;
 	tr.viewParms.projectionMatrix[8] = ( xmax + xmin ) / width;	// normally 0
@@ -560,7 +525,6 @@ void R_SetupProjection( void ) {
 	tr.viewParms.projectionMatrix[7] = 0;
 	tr.viewParms.projectionMatrix[11] = -1;
 	tr.viewParms.projectionMatrix[15] = 0;
-#endif
 }
 
 /*
@@ -1325,15 +1289,10 @@ void R_SortDrawSurfs( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 	// the first surfaces, not the last ones
 	if ( numDrawSurfs > MAX_DRAWSURFS ) {
 		numDrawSurfs = MAX_DRAWSURFS;
-#if defined(_DEBUG) && defined(_XBOX)
-		Com_Printf(S_COLOR_RED"Draw surface overflow!  Tell Brian.\n");
-#endif
 	}
 
-#ifndef _XBOX
 	// sort the drawsurfs by sort type, then orientation, then shader
 	qsortFast (drawSurfs, numDrawSurfs, sizeof(drawSurf_t) );
-#endif
 
 	// check for any pass through drawing, which
 	// may cause another view to be rendered first
@@ -1359,10 +1318,6 @@ void R_SortDrawSurfs( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 		}
 	}
 
-#ifdef _XBOX
-	qsortFast (drawSurfs, numDrawSurfs, sizeof(drawSurf_t) );
-#endif
-
 	R_AddDrawSurfCmd( drawSurfs, numDrawSurfs );
 }
 
@@ -1383,12 +1338,6 @@ void R_AddEntitySurfaces (void) {
 	      tr.currentEntityNum < tr.refdef.num_entities; 
 		  tr.currentEntityNum++ ) {
 		ent = tr.currentEntity = &tr.refdef.entities[tr.currentEntityNum];
-
-#ifdef _XBOX
-		if(ClientManager::ActiveClientNum() == 1)
-			if(ent->e.skipForPlayer2 == true)
-				continue;
-#endif
 
 		assert(ent->e.renderfx >= 0);
 
@@ -1498,42 +1447,12 @@ Ghoul2 Insert End
 R_GenerateDrawSurfs
 ====================
 */
-#ifdef _XBOX
-extern void R_MarkLeaves(mleaf_s*);
-void R_GenerateDrawSurfs( bool isPortal ) {
-	// determine which leaves are in the PVS / areamask
-	if ( !(tr.refdef.rdflags & RDF_NOWORLDMODEL) ) {
-		R_MarkLeaves (NULL);
-	}
-
-	R_AddWorldSurfaces ();
-
-	R_AddPolygonSurfaces();
-
-/*
-	R_AddTerrainSurfaces();
-*/
-
-	// set the projection matrix with the minimum zfar
-	// now that we have the world bounded
-	// this needs to be done before entities are
-	// added, because they use the projection
-	// matrix for lod calculation
-	R_SetupProjection ();
-
-	R_AddEntitySurfaces ();
-}
-
-#else 
-
 void R_GenerateDrawSurfs( void ) {
 	R_AddWorldSurfaces ();
 
 	R_AddPolygonSurfaces();
 
-/*
 	R_AddTerrainSurfaces(); //rwwRMG - added
-*/
 
 	// set the projection matrix with the minimum zfar
 	// now that we have the world bounded
@@ -1544,8 +1463,6 @@ void R_GenerateDrawSurfs( void ) {
 
 	R_AddEntitySurfaces ();
 }
-
-#endif
 
 /*
 ================
@@ -1629,11 +1546,7 @@ void R_RenderView (viewParms_t *parms) {
 
 	R_SetupFrustum ();
 
-#ifdef _XBOX
-	R_GenerateDrawSurfs(parms->isPortal);
-#else
 	R_GenerateDrawSurfs();
-#endif
 
 	R_SortDrawSurfs( tr.refdef.drawSurfs + firstDrawSurf, tr.refdef.numDrawSurfs - firstDrawSurf );
 

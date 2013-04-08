@@ -1,5 +1,5 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 #include "tr_local.h"
 
@@ -9,10 +9,8 @@
 #endif
 #endif
 
-#ifdef _XBOX
-#include "../cgame/cg_local.h"
-#include "../client/cl_data.h"
-#include "../win32/win_highdynamicrange.h"
+#ifdef VV_LIGHTING
+#include "tr_lightmanager.h"
 #endif
 
 backEndData_t	*backEndData;
@@ -38,17 +36,10 @@ extern void R_SetupFrustum(void);
 static const float s_flipMatrix[16] = {
 	// convert from our coordinate system (looking down X)
 	// to OpenGL's coordinate system (looking down -Z)
-#if defined (_XBOX)
-	0, 0, 1, 0,
-	-1, 0, 0, 0,
-	0, 1, 0, 0,
-	0, 0, 0, 1
-#else
 	0, 0, -1, 0,
 	-1, 0, 0, 0,
 	0, 1, 0, 0,
 	0, 0, 0, 1
-#endif
 };
 
 #ifndef DEDICATED
@@ -71,9 +62,7 @@ void GL_Bind( image_t *image ) {
 	}
 
 	if ( glState.currenttextures[glState.currenttmu] != texnum ) {
-#ifndef _XBOX
 		image->frameUsed = tr.frameCount;
-#endif
 		glState.currenttextures[glState.currenttmu] = texnum;
 		qglBindTexture (GL_TEXTURE_2D, texnum);
 	}
@@ -96,9 +85,7 @@ void GL_Bind3D( image_t *image )
 	}
 
 	if ( glState.currenttextures[glState.currenttmu] != texnum ) {
-#ifndef _XBOX
 		image->frameUsed = tr.frameCount;
-#endif
 		glState.currenttextures[glState.currenttmu] = texnum;
 		qglBindTexture (GL_TEXTURE_3D, texnum);
 	}
@@ -222,11 +209,6 @@ void GL_TexEnv( int env )
 	case GL_ADD:
 		qglTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_ADD );
 		break;
-#ifdef _XBOX
-	case GL_NONE:
-		qglTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_NONE );
-		break;
-#endif
 	default:
 		Com_Error( ERR_DROP, "GL_TexEnv: invalid env '%d' passed\n", env );
 		break;
@@ -606,30 +588,12 @@ static inline bool R_WorldCoordToScreenCoordFloat(vec3_t worldCoord, float *x, f
 	xcenter = glConfig.vidWidth / 2;
 	ycenter = glConfig.vidHeight / 2;
 
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue)
-		ycenter = 240 / 2;
-#endif
-
 	//AngleVectors (tr.refdef.viewangles, vfwd, vright, vup);
-#ifdef _XBOX
-	if(ClientManager::splitScreenMode == qtrue) {
-		VectorCopy(backEnd.refdef.viewaxis[0], vfwd);
-		VectorCopy(backEnd.refdef.viewaxis[1], vright);
-		VectorCopy(backEnd.refdef.viewaxis[2], vup);
-
-		VectorSubtract (worldCoord, backEnd.refdef.vieworg, local);
-	}
-	else {
-#endif
 	VectorCopy(tr.refdef.viewaxis[0], vfwd);
 	VectorCopy(tr.refdef.viewaxis[1], vright);
 	VectorCopy(tr.refdef.viewaxis[2], vup);
 
 	VectorSubtract (worldCoord, tr.refdef.vieworg, local);
-#ifdef _XBOX
-	}
-#endif
 
 	transformed[0] = DotProduct(local,vright);
 	transformed[1] = DotProduct(local,vup);
@@ -774,7 +738,6 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 		}
 		R_DecomposeSort( drawSurf->sort, &entityNum, &shader, &fogNum, &dlighted );
 
-#ifndef _XBOX	// GLOWXXX
 		// If we're rendering glowing objects, but this shader has no stages with glow, skip it!
 		if ( g_bRenderGlowingObjects && !shader->hasGlow )
 		{
@@ -784,7 +747,7 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 			dlighted = oldDlighted;
 			continue;
 		}
-#endif
+
 		oldSort = drawSurf->sort;
 
 		//
@@ -851,6 +814,44 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 				continue;
 			}
 		}
+		/*
+		else if (shader == tr.distortionShader &&
+			g_numPostRenders < MAX_POST_RENDERS)
+		{ //not an ent, just a surface that needs this effect
+			pRender = &g_postRenders[g_numPostRenders];
+
+			g_numPostRenders++;
+
+			depthRange = 0;
+			pRender->depthRange = depthRange;
+
+			//It is not necessary to update the old* values because
+			//we are not updating now with the current values.
+			depthRange = oldDepthRange;
+
+			//store off the ent num
+			pRender->entNum = entityNum;
+
+			//remember the other values necessary for rendering this surf
+			pRender->drawSurf = drawSurf;
+			pRender->dlighted = dlighted;
+			pRender->fogNum = fogNum;
+			pRender->shader = shader;
+
+			pRender->eValid = qfalse;
+
+			//assure the info is back to the last set state
+			shader = oldShader;
+			entityNum = oldEntityNum;
+			fogNum = oldFogNum;
+			dlighted = oldDlighted;
+
+			oldSort = -20; //invalidate this thing, cause we may want to postrender more surfs of the same sort
+
+			//continue without bothering to begin a draw surf
+			continue;
+		}
+		*/
 
 		if (shader != oldShader || fogNum != oldFogNum || dlighted != oldDlighted 
 			|| ( entityNum != oldEntityNum && !shader->entityMergable ) )
@@ -867,13 +868,11 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 #endif
 				RB_EndSurface();
 
-/*
 				if (!didShadowPass && shader && shader->sort > SS_BANNER)
 				{
 					RB_ShadowFinish();
 					didShadowPass = true;
 				}
-*/
 			}
 			RB_BeginSurface( shader, fogNum );
 			oldShader = shader;
@@ -889,6 +888,7 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 
 			if ( entityNum != TR_WORLDENT ) {
 				backEnd.currentEntity = &backEnd.refdef.entities[entityNum];
+
 				backEnd.refdef.floatTime = originalTime - backEnd.currentEntity->e.shaderTime;
 				// we have to reset the shaderTime as well otherwise image animations start
 				// from the wrong frame
@@ -899,7 +899,11 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 
 				// set up the dynamic lighting if needed
 				if ( backEnd.currentEntity->needDlights ) {
+#ifdef VV_LIGHTING
+					VVLightMan.R_TransformDlights( &backEnd.ori );
+#else
 					R_TransformDlights( backEnd.refdef.num_dlights, backEnd.refdef.dlights, &backEnd.ori );
+#endif
 				}
 
 				if ( backEnd.currentEntity->e.renderfx & RF_NODEPTH ) {
@@ -917,7 +921,11 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 				// we have to reset the shaderTime as well otherwise image animations on
 				// the world (like water) continue with the wrong frame
 				tess.shaderTime = backEnd.refdef.floatTime - tess.shader->timeOffset;
+#ifdef VV_LIGHTING
+				VVLightMan.R_TransformDlights( &backEnd.ori );
+#else
 				R_TransformDlights( backEnd.refdef.num_dlights, backEnd.refdef.dlights, &backEnd.ori );
+#endif
 			}
 
 			qglLoadMatrixf( backEnd.ori.modelMatrix );
@@ -983,20 +991,43 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 
 			RB_BeginSurface( pRender->shader, pRender->fogNum );
 
-			backEnd.currentEntity = &backEnd.refdef.entities[pRender->entNum];
+			/*
+			if (!pRender->eValid && pRender->entNum == TR_WORLDENT)
+			{ //world/other surface
+				backEnd.currentEntity = &tr.worldEntity;
+				backEnd.refdef.floatTime = originalTime;
+				backEnd.ori = backEnd.viewParms.world;
+				// we have to reset the shaderTime as well otherwise image animations on
+				// the world (like water) continue with the wrong frame
+				tess.shaderTime = backEnd.refdef.floatTime - tess.shader->timeOffset;
 
-			backEnd.refdef.floatTime = originalTime - backEnd.currentEntity->e.shaderTime;
-			// we have to reset the shaderTime as well otherwise image animations start
-			// from the wrong frame
-			tess.shaderTime = backEnd.refdef.floatTime - tess.shader->timeOffset;
-
-			// set up the transformation matrix
-			R_RotateForEntity( backEnd.currentEntity, &backEnd.viewParms, &backEnd.ori );
-
-			// set up the dynamic lighting if needed
-			if ( backEnd.currentEntity->needDlights )
-			{
+#ifdef VV_LIGHTING
+				VVLightMan.R_TransformDlights( &backEnd.ori );
+#else
 				R_TransformDlights( backEnd.refdef.num_dlights, backEnd.refdef.dlights, &backEnd.ori );
+#endif
+			}
+			else
+			*/
+			{ //ent
+				backEnd.currentEntity = &backEnd.refdef.entities[pRender->entNum];
+
+				backEnd.refdef.floatTime = originalTime - backEnd.currentEntity->e.shaderTime;
+				// we have to reset the shaderTime as well otherwise image animations start
+				// from the wrong frame
+				tess.shaderTime = backEnd.refdef.floatTime - tess.shader->timeOffset;
+
+				// set up the transformation matrix
+				R_RotateForEntity( backEnd.currentEntity, &backEnd.viewParms, &backEnd.ori );
+
+				// set up the dynamic lighting if needed
+				if ( backEnd.currentEntity->needDlights ) {
+#ifdef VV_LIGHTING
+					VVLightMan.R_TransformDlights( &backEnd.ori );
+#else
+					R_TransformDlights( backEnd.refdef.num_dlights, backEnd.refdef.dlights, &backEnd.ori );
+#endif
+				}
 			}
 
 			qglLoadMatrixf( backEnd.ori.modelMatrix );
@@ -1018,6 +1049,74 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 					break;
 			}
 
+			/*
+			if (!pRender->eValid)
+			{ //special full-screen "distortion" (or refraction or whatever the heck you want to call it)
+				if (!tr_stencilled)
+				{ //only need to do this once every frame (that a surface using it is around)
+					int radX = 2048;
+					int radY = 2048;
+					int x = glConfig.vidWidth/2;
+					int y = glConfig.vidHeight/2;
+					int cX, cY;
+
+					GL_Bind( tr.screenImage );
+					//using this method, we could pixel-filter the texture and all sorts of crazy stuff.
+					//but, it is slow as hell.
+#if 0
+					static byte *tmp = NULL;
+					if (!tmp)
+					{
+						tmp = (byte *)Z_Malloc((sizeof(byte)*4)*(glConfig.vidWidth*glConfig.vidHeight), TAG_ICARUS, qtrue);
+					}
+					qglReadPixels(0, 0, glConfig.vidWidth, glConfig.vidHeight, GL_RGBA, GL_UNSIGNED_BYTE, tmp);
+					qglTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 512, 512, 0, GL_RGBA, GL_UNSIGNED_BYTE, tmp);
+#endif
+
+					if (radX > glConfig.maxTextureSize)
+					{
+						radX = glConfig.maxTextureSize;
+					}
+					if (radY > glConfig.maxTextureSize)
+					{
+						radY = glConfig.maxTextureSize;
+					}
+
+					while (glConfig.vidWidth < radX)
+					{
+						radX /= 2;
+					}
+					while (glConfig.vidHeight < radY)
+					{
+						radY /= 2;
+					}
+
+					cX = x-(radX/2);
+					cY = y-(radY/2);
+
+					if (cX+radX > glConfig.vidWidth)
+					{ //would it go off screen?
+						cX = glConfig.vidWidth-radX;
+					}
+					else if (cX < 0)
+					{ //cap it off at 0
+						cX = 0;
+					}
+
+					if (cY+radY > glConfig.vidHeight)
+					{ //would it go off screen?
+						cY = glConfig.vidHeight-radY;
+					}
+					else if (cY < 0)
+					{ //cap it off at 0
+						cY = 0;
+					}
+
+					qglCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16, cX, cY, radX, radY, 0);
+				}
+				lastPostEnt = ENTITYNUM_NONE;
+			}
+			*/
 			if (!pRender->eValid)
 			{
 			}
@@ -1025,30 +1124,39 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 				lastPostEnt != pRender->entNum)
 			{ //do the capture now, we only need to do it once per ent
 				int x, y;
-				int rad = backEnd.currentEntity->e.radius;
-
-				// Hack - prevent this from using
-				if( rad > SCREEN_IMAGE_MAX_HEIGHT )
-				{
-#ifndef FINAL_BUILD
-					Com_Printf( "WARNING: Shrinking screenImage\n" );
-#endif
-					rad = SCREEN_IMAGE_MAX_HEIGHT;
-				}
-
+				int rad;
+				bool r;
 				//We are going to just bind this, and then the CopyTexImage is going to
 				//stomp over this texture num in texture memory.
 				GL_Bind( tr.screenImage );
 
-				if (R_WorldCoordToScreenCoord( backEnd.currentEntity->e.origin, &x, &y ))
+#if 0 //yeah.. this kinda worked but it was stupid
+				if (pRender->eValid)
+				{
+					r = R_WorldCoordToScreenCoord( backEnd.currentEntity->e.origin, &x, &y );
+					rad = backEnd.currentEntity->e.radius;
+				}
+				else
+				{
+					vec3_t v;
+					//probably a little bit expensive.. but we're doing this for looks, not speed!
+					if (!R_AverageTessXYZ(v))
+					{ //failed, just use first vert I guess
+						VectorCopy(tess.xyz[0], v);
+					}
+					r = R_WorldCoordToScreenCoord( v, &x, &y );
+					rad = 256;
+				}
+#else
+				r = R_WorldCoordToScreenCoord( backEnd.currentEntity->e.origin, &x, &y );
+				rad = backEnd.currentEntity->e.radius;
+#endif
+
+				if (r)
 				{
 					int cX, cY;
 					cX = glConfig.vidWidth-x-(rad/2);
 					cY = glConfig.vidHeight-y-(rad/2);
-
-#ifdef _XBOX
-					cY = 240 - y - (rad / 2);
-#endif
 
 					if (cX+rad > glConfig.vidWidth)
 					{ //would it go off screen?
@@ -1059,20 +1167,6 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 						cX = 0;
 					}
 
-#ifdef _XBOX
-					if(ClientManager::splitScreenMode == qtrue)
-					{
-                        if (cY+rad > 240)
-						{
-							cY = 240 - rad;
-						}
-						else if (cY < 0)
-						{
-							cY = 0;
-						}
-					}
-					else {
-#endif
 					if (cY+rad > glConfig.vidHeight)
 					{ //would it go off screen?
 						cY = glConfig.vidHeight-rad;
@@ -1081,19 +1175,9 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 					{ //cap it off at 0
 						cY = 0;
 					}
-#ifdef _XBOX 
-					}
-#endif
 
 					//now copy a portion of the screen to this texture
-#ifdef _XBOX
-					if(ClientManager::splitScreenMode == qtrue)
-						qglCopyBackBufferToTexEXT(rad, rad, cX, (backEnd.refdef.y + 240) - cY, (cX + rad), (backEnd.refdef.y + 240) - (cY + rad));
-					else
-                        qglCopyBackBufferToTexEXT(rad, rad, cX, (480 - cY), (cX + rad), (480 - (cY + rad)));
-#else
 					qglCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16, cX, cY, rad, rad, 0);
-#endif
 
 					lastPostEnt = pRender->entNum;
 				}
@@ -1117,20 +1201,14 @@ void RB_RenderDrawSurfList( drawSurf_t *drawSurfs, int numDrawSurfs ) {
 	{ //draw in the stencil buffer's cutout
 		RB_DistortionFill();
 	}
-/*
 	if (!didShadowPass)
 	{
 		// darken down any stencil shadows
 		RB_ShadowFinish();
 		didShadowPass = true;
 	}
-*/
-#ifdef _XBOX
-	if (Cvar_VariableIntegerValue("r_hdreffect"))
-	{
-//		HDREffect.Render();
-	}
-#endif
+
+	//HDREffect.Render();
 
 	// add light flares on lights that aren't obscured
 
@@ -1157,39 +1235,6 @@ RB_SetGL2D
 
 ================
 */
-#ifdef _XBOX
-extern int glcfgWidth, glcfgHeight, glcfgX, glcfgY;
-void	RB_SetGL2D (void) {
-	backEnd.projection2D = qtrue;
-
-	if(cg->widescreen)
-		glcfgWidth = 720;
-
-	// set 2D virtual screen size
-	qglViewport( glcfgX, glcfgY, glcfgWidth, glcfgHeight );
-	qglScissor( glcfgX, glcfgY, glcfgWidth, glcfgHeight );
-	qglMatrixMode(GL_PROJECTION);
-    qglLoadIdentity ();
-	if(cg->widescreen && !(VM_Call( uivm, UI_IS_FULLSCREEN)) && cls.state == CA_ACTIVE)
-        qglOrtho (0, 720, 0, 480, 0, 1);
-	else
-        qglOrtho (0, 640, 0, 480, 0, 1);
-
-	qglMatrixMode(GL_MODELVIEW);
-    qglLoadIdentity ();
-
-	GL_State( GLS_DEPTHTEST_DISABLE |
-			  GLS_SRCBLEND_SRC_ALPHA |
-			  GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA );
-
-	qglDisable( GL_CULL_FACE );
-	qglDisable( GL_CLIP_PLANE0 );
-
-	// set time for 2D shaders
-	backEnd.refdef.time = Sys_Milliseconds()*com_timescale->value;
-	backEnd.refdef.floatTime = backEnd.refdef.time * 0.001;
-}
-#else
 void	RB_SetGL2D (void) {
 	backEnd.projection2D = qtrue;
 
@@ -1213,7 +1258,6 @@ void	RB_SetGL2D (void) {
 	backEnd.refdef.time = Sys_Milliseconds()*com_timescale->value;
 	backEnd.refdef.floatTime = backEnd.refdef.time * 0.001f;
 }
-#endif
 
 
 /*
@@ -1227,9 +1271,6 @@ Used for cinematics.
 */
 void RE_StretchRaw (int x, int y, int w, int h, int cols, int rows, const byte *data, int client, qboolean dirty) 
 {
-	assert( 0 );
-	return;
-/*
 	int			start, end;
 
 	if ( !tr.registered ) {
@@ -1289,22 +1330,17 @@ void RE_StretchRaw (int x, int y, int w, int h, int cols, int rows, const byte *
 	qglTexCoord2f ( 0.5f / cols, ( rows - 0.5f ) / rows );
 	qglVertex2f (x, y+h);
 	qglEnd ();
-*/
 }
 
 void RE_UploadCinematic (int cols, int rows, const byte *data, int client, qboolean dirty) {
-/*
+
 	GL_Bind( tr.scratchImage[client] );
 
 	// if the scratchImage isn't in the format we want, specify it as a new texture
 	if ( cols != tr.scratchImage[client]->width || rows != tr.scratchImage[client]->height ) {
 		tr.scratchImage[client]->width = tr.scratchImage[client]->width = cols;
 		tr.scratchImage[client]->height = tr.scratchImage[client]->height = rows;
-#ifdef _XBOX
-		qglTexImage2D( GL_TEXTURE_2D, 0, GL_RGB5, cols, rows, 0, GL_RGB_SWIZZLE_EXT, GL_UNSIGNED_BYTE, data );
-#else
 		qglTexImage2D( GL_TEXTURE_2D, 0, GL_RGB8, cols, rows, 0, GL_RGBA, GL_UNSIGNED_BYTE, data );
-#endif
 		qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
 		qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
 		qglTexParameterf( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP );
@@ -1313,14 +1349,9 @@ void RE_UploadCinematic (int cols, int rows, const byte *data, int client, qbool
 		if (dirty) {
 			// otherwise, just subimage upload it so that drivers can tell we are going to be changing
 			// it and don't try and do a texture compression
-#ifdef _XBOX
-			qglTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, cols, rows, GL_RGB_SWIZZLE_EXT, GL_UNSIGNED_BYTE, data );
-#else
 			qglTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, cols, rows, GL_RGBA, GL_UNSIGNED_BYTE, data );
-#endif
 		}
 	}
-*/
 }
 
 
@@ -1447,11 +1478,7 @@ const void *RB_RotatePic ( const void *data )
 		qglRotatef(cmd->a, 0.0, 0.0, 1.0);
 		
 		GL_Bind( image );
-#ifdef _XBOX
-		qglBeginEXT (GL_QUADS, 4, 0, 0, 4, 0);
-#else
 		qglBegin (GL_QUADS);
-#endif
 		qglTexCoord2f( cmd->s1, cmd->t1);
 		qglVertex2f( -cmd->w, 0 );
 		qglTexCoord2f( cmd->s2, cmd->t1 );
@@ -1505,11 +1532,7 @@ const void *RB_RotatePic2 ( const void *data )
 			qglRotatef( cmd->a, 0.0, 0.0, 1.0 );
 		
 			GL_Bind( image );
-#ifdef _XBOX
-			qglBeginEXT( GL_QUADS, 4, 0, 0, 4, 0);
-#else
 			qglBegin( GL_QUADS );
-#endif
 				qglTexCoord2f( cmd->s1, cmd->t1);
 				qglVertex2f( -cmd->w * 0.5f, -cmd->h * 0.5f );
 
@@ -1567,7 +1590,6 @@ const void	*RB_DrawSurfs( const void *data ) {
 	*/
 
 	// Render dynamic glowing/flaring objects.
-#ifndef _XBOX	// GLOWXXX
 	if ( !(backEnd.refdef.rdflags & RDF_NOWORLDMODEL) && g_bDynamicGlowSupported && r_DynamicGlow->integer )
 	{
 		// Copy the normal scene to texture.
@@ -1624,7 +1646,6 @@ const void	*RB_DrawSurfs( const void *data ) {
 		// Draw the glow additively over the screen.
 		RB_DrawGlowOverlay(); 
 	}
-#endif	// _XBOX
 
 	return (const void *)(cmd + 1);
 }
@@ -1642,6 +1663,52 @@ const void	*RB_DrawBuffer( const void *data ) {
 	cmd = (const drawBufferCommand_t *)data;
 
 	qglDrawBuffer( cmd->buffer );
+
+	// clear screen for debugging
+	if (tr.world && tr.world->globalFog != -1)
+	{
+		const fog_t		*fog = &tr.world->fogs[tr.world->globalFog];
+
+		qglClearColor(fog->parms.color[0],  fog->parms.color[1], fog->parms.color[2], 1.0f );
+		qglClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+	}
+	else if ( r_clear->integer ) {
+		int i = r_clear->integer;
+		if (i == 42) {
+			i = Q_irand(0,8);
+		}
+		switch (i)
+		{
+		default:
+			qglClearColor( 1, 0, 0.5, 1 );
+			break;
+		case 1:
+			qglClearColor( 1.0, 0.0, 0.0, 1.0); //red
+			break;
+		case 2:
+			qglClearColor( 0.0, 1.0, 0.0, 1.0); //green
+			break;
+		case 3:
+			qglClearColor( 1.0, 1.0, 0.0, 1.0); //yellow
+			break;
+		case 4:
+			qglClearColor( 0.0, 0.0, 1.0, 1.0); //blue
+			break;
+		case 5:
+			qglClearColor( 0.0, 1.0, 1.0, 1.0); //cyan
+			break;
+		case 6:
+			qglClearColor( 1.0, 0.0, 1.0, 1.0); //magenta
+			break;
+		case 7:
+			qglClearColor( 1.0, 1.0, 1.0, 1.0); //white
+			break;
+		case 8:
+			qglClearColor( 0.0, 0.0, 0.0, 1.0); //black
+			break;
+		}		
+		qglClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+	}
 
 	return (const void *)(cmd + 1);
 }
@@ -1688,11 +1755,7 @@ void RB_ShowImages( void ) {
 		}
 
 		GL_Bind( image );
-#ifdef _XBOX
-		qglBeginEXT (GL_QUADS, 4, 0, 0, 4, 0);
-#else
 		qglBegin (GL_QUADS);
-#endif
 		qglTexCoord2f( 0, 0 );
 		qglVertex2f( x, y );
 		qglTexCoord2f( 1, 0 );
@@ -1735,7 +1798,6 @@ const void	*RB_SwapBuffers( const void *data ) {
 
 	// we measure overdraw by reading back the stencil buffer and
 	// counting up the number of increments that have happened
-#ifndef _XBOX
 	if ( r_measureOverdraw->integer ) {
 		int i;
 		long sum = 0;
@@ -1751,7 +1813,6 @@ const void	*RB_SwapBuffers( const void *data ) {
 		backEnd.pc.c_overDraw += sum;
 		Hunk_FreeTempMemory( stencilReadback );
 	}
-#endif
 
     if ( !glState.finishCalled ) {
         qglFinish();
@@ -1840,8 +1901,6 @@ void RB_ExecuteRenderCommands( const void *data ) {
 	}
 
 }
-
-#ifndef _XBOX	// GLOWXXX
 
 // What Pixel Shader type is currently active (regcoms or fragment programs).
 GLuint g_uiCurrentPixelShaderType = 0x0;
@@ -2206,6 +2265,5 @@ static inline void RB_DrawGlowOverlay()
 
 	qglEnable( GL_DEPTH_TEST );
 }
-#endif	//XBOX
 
 #endif //!DEDICATED

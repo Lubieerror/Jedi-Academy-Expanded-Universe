@@ -6,8 +6,7 @@
 
 #define	WAYPOINT_NONE	-1
 
-//#define MAX_STORED_WAYPOINTS	512//???
-#define MAX_STORED_WAYPOINTS	64
+#define MAX_STORED_WAYPOINTS	512//???
 #define MAX_WAYPOINT_REACHED_DIST_SQUARED	1024	//32 squared
 #define	MAX_COLL_AVOID_DIST					128
 #define	NAVGOAL_USE_RADIUS					16384	//Used to force the waypoint_navgoals with a manually set radius to actually do a DistanceSquared check, not just bounds overlap
@@ -25,7 +24,7 @@
 // Some kind of wacky code sharing going on here, but we need these things
 // in g_navnew.c -- which is now C++ code in the GAME on Xbox, so the
 // original test fails.
-#if !defined(__cplusplus) || (defined(_XBOX) && defined(QAGAME)) || (defined(__linux__) && defined(QAGAME))
+#if !defined(__cplusplus) || (defined(__linux__) && defined(QAGAME))
 //rww - Rest of defines here are also shared in exe, do not modify.
 #define	__NEWCOLLECT	1
 

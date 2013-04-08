@@ -66,7 +66,7 @@ void		G2_List_Model_Surfaces(const char *fileName);
 void		G2_List_Model_Bones(const char *fileName, int frame);
 qboolean	G2_GetAnimFileName(const char *fileName, char **filename);
 #ifdef _G2_GORE
-void		G2_TraceModels(CGhoul2Info_v &ghoul2, vec3_t rayStart, vec3_t rayEnd, CollisionRecord_t *collRecMap, int entNum, int traceFlags, int useLod, float fRadius, float ssize,float tsize,float theta,int shader, SSkinGoreData *gore);
+void		G2_TraceModels(CGhoul2Info_v &ghoul2, vec3_t rayStart, vec3_t rayEnd, CollisionRecord_t *collRecMap, int entNum, int traceFlags, int useLod, float fRadius, float ssize,float tsize,float theta,int shader, SSkinGoreData *gore, qboolean skipIfLODNotMatch);
 #else
 void		G2_TraceModels(CGhoul2Info_v &ghoul2, vec3_t rayStart, vec3_t rayEnd, CollisionRecord_t *collRecMap, int entNum, int traceFlags, int useLod, float fRadius);
 #endif
@@ -94,8 +94,6 @@ void		G2_RemoveRedundantBolts(boltInfo_v &bltlist, surfaceInfo_v &slist, int *ac
 
 
 // API calls - G2_API.cpp
-void		G2API_GetModelName(CGhoul2Info_v &ghoul2, const int modelIndex,
-		const char **modelName);
 void		G2API_SetTime(int currentTime, int clock);
 int			G2API_GetTime(int argTime);
 
@@ -153,6 +151,8 @@ int			G2API_GetGhoul2ModelFlags(CGhoul2Info *ghlInfo);
 qboolean	G2API_GetAnimFileName(CGhoul2Info *ghlInfo, char **filename);
 void		G2API_CollisionDetect(CollisionRecord_t *collRecMap, CGhoul2Info_v &ghoul2, const vec3_t angles, const vec3_t position,
 										  int frameNumber, int entNum, vec3_t rayStart, vec3_t rayEnd, vec3_t scale, CMiniHeap *G2VertSpace, int traceFlags, int useLod, float fRadius);
+void		G2API_CollisionDetectCache(CollisionRecord_t *collRecMap, CGhoul2Info_v &ghoul2, const vec3_t angles, const vec3_t position,
+										  int frameNumber, int entNum, vec3_t rayStart, vec3_t rayEnd, vec3_t scale, CMiniHeap *G2VertSpace, int traceFlags, int useLod, float fRadius);
 
 void		G2API_GiveMeVectorFromMatrix(mdxaBone_t *boltMatrix, Eorientations flags, vec3_t vec);
 int			G2API_CopyGhoul2Instance(CGhoul2Info_v &g2From, CGhoul2Info_v &g2To, int modelIndex);
@@ -161,7 +161,6 @@ int			G2API_GetParentSurface(CGhoul2Info *ghlInfo, const int index);
 int			G2API_GetSurfaceIndex(CGhoul2Info *ghlInfo, const char *surfaceName);
 char		*G2API_GetSurfaceName(CGhoul2Info *ghlInfo, int surfNumber);
 char		*G2API_GetGLAName(CGhoul2Info_v &ghoul2, int modelIndex);
-char		*G2API_GetGLMName(void *pGhoul2, int modelIndex);
 qboolean	G2API_SetBoneAnglesMatrix(CGhoul2Info *ghlInfo, const char *boneName, const mdxaBone_t &matrix, const int flags,
 									  qhandle_t *modelList, int blendTime = 0, int currentTime = 0);
 qboolean	G2API_SetNewOrigin(CGhoul2Info_v &ghoul2, const int boltIndex);

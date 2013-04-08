@@ -1,10 +1,10 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 // world.c -- world query functions
 
 #include "server.h"
-#include "../ghoul2/G2_local.h"
+#include "ghoul2/G2_local.h"
 extern CMiniHeap *G2VertSpaceServer;
 
 /*
@@ -734,8 +734,19 @@ Ghoul2 Insert Start
 				Com_Printf( "Ghoul2 trace   lod=%1d   length=%6.0f   to %s\n",clip->useLod,VectorDistance(clip->start, clip->end),(*((CGhoul2Info_v *)touch->ghoul2))[0].mFileName);
 			}
 #endif
-			G2API_CollisionDetect(G2Trace, *((CGhoul2Info_v *)touch->ghoul2), angles, touch->r.currentOrigin, svs.time, touch->s.number, clip->start, clip->end, touch->modelScale, G2VertSpaceServer, 0, clip->useLod, fRadius);
 
+			if (com_optvehtrace &&
+				com_optvehtrace->integer &&
+				touch->s.eType == ET_NPC &&
+				touch->s.NPC_class == CLASS_VEHICLE &&
+				touch->m_pVehicle)
+			{ //for vehicles cache the transform data.
+				G2API_CollisionDetectCache(G2Trace, *((CGhoul2Info_v *)touch->ghoul2), angles, touch->r.currentOrigin, svs.time, touch->s.number, clip->start, clip->end, touch->modelScale, G2VertSpaceServer, 0, clip->useLod, fRadius);
+			}
+			else
+			{
+				G2API_CollisionDetect(G2Trace, *((CGhoul2Info_v *)touch->ghoul2), angles, touch->r.currentOrigin, svs.time, touch->s.number, clip->start, clip->end, touch->modelScale, G2VertSpaceServer, 0, clip->useLod, fRadius);
+			}
 
 			tN = 0;
 			while (tN < MAX_G2_COLLISIONS)

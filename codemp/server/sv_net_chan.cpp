@@ -1,5 +1,5 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 #include "server.h"
 
@@ -15,9 +15,6 @@ SV_Netchan_Encode
 ==============
 */
 static void SV_Netchan_Encode( client_t *client, msg_t *msg ) {
-#ifdef _XBOX
-	return;
-#endif
 	long reliableAcknowledge, i, index;
 	byte key, *string;
         int	srdc, sbit, soob;
@@ -74,9 +71,6 @@ SV_Netchan_Decode
 ==============
 */
 static void SV_Netchan_Decode( client_t *client, msg_t *msg ) {
-#ifdef _XBOX
-	return;
-#endif
 	int serverId, messageAcknowledge, reliableAcknowledge;
 	int i, index, srdc, sbit, soob;
 	byte key, *string;
@@ -136,24 +130,14 @@ SV_Netchan_Transmit
 
 //extern byte chksum[65536];
 void SV_Netchan_Transmit( client_t *client, msg_t *msg) {	//int length, const byte *data ) {
-
-	// To avoid endless recursion:
-	static bool droppingClient = false;
-
+//	int i;
 	MSG_WriteByte( msg, svc_EOF );
+//	for(i=SV_ENCODE_START;i<msg->cursize;i++) {
+//		chksum[i-SV_ENCODE_START] = msg->data[i];
+//	}
+//	Huff_Compress( msg, SV_ENCODE_START );
 	SV_Netchan_Encode( client, msg );
-
-	if( !Netchan_Transmit( &client->netchan, msg->cursize, msg->data ) &&
-		!droppingClient )
-	{
-		// Don't fail when we get around to sending the removepeer to this person again!
-		droppingClient = true;
-
-		// Quick detection of dropped clients!
-		SV_DropClient( client, "@MENUS_LOST_CONNECTION" );
-
-		droppingClient = false;
-	}
+	Netchan_Transmit( &client->netchan, msg->cursize, msg->data );
 }
 
 /*

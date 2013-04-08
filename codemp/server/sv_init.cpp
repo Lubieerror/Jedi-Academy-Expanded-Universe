@@ -1,5 +1,5 @@
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 #include "server.h"
 
@@ -7,19 +7,14 @@
 Ghoul2 Insert Start
 */
 #if !defined(TR_LOCAL_H)
-	#include "../renderer/tr_local.h"
+	#include "renderer/tr_local.h"
 #endif
 
 #if !defined (MINIHEAP_H_INC)
-#include "../qcommon/MiniHeap.h"
+#include "qcommon/MiniHeap.h"
 #endif
 
-#include "../qcommon/stringed_ingame.h"
-
-#ifdef _XBOX
-#include "../cgame/cg_local.h"
-#include "../client/cl_data.h"
-#endif
+#include "qcommon/stringed_ingame.h"
 
 /*
 ===============
@@ -274,8 +269,7 @@ void SV_Startup( void ) {
 
 	} else {
 		// we don't need nearly as many when playing locally
-//		svs.numSnapshotEntities = sv_maxclients->integer * 4 * 64;
-		svs.numSnapshotEntities = sv_maxclients->integer * 8 * 64;
+		svs.numSnapshotEntities = sv_maxclients->integer * 4 * 64;
 	}
 	svs.initialized = qtrue;
 
@@ -291,9 +285,7 @@ Ghoul2 Insert Start
 {
 	// clear out most of the sv struct
 	memset(&sv, 0, (sizeof(sv)));
-/*
 	sv.mLocalSubBSPIndex = -1;
-*/
 }
 /*
 Ghoul2 Insert End
@@ -361,8 +353,7 @@ void SV_ChangeMaxClients( void ) {
 		svs.numSnapshotEntities = sv_maxclients->integer * PACKET_BACKUP * 64;
 	} else {
 		// we don't need nearly as many when playing locally
-//		svs.numSnapshotEntities = sv_maxclients->integer * 4 * 64;
-		svs.numSnapshotEntities = sv_maxclients->integer * 8 * 64;
+		svs.numSnapshotEntities = sv_maxclients->integer * 4 * 64;
 	}
 }
 
@@ -441,99 +432,6 @@ void SV_SendMapChange(void)
 
 void R_SVModelInit();
 
-
-#ifdef _XBOX
-//To avoid fragmentation, we want everything free by this point.
-//Much of this probably violates DLL boundaries, so it's done on
-//Xbox only.
-extern void NAV_Free(void);
-extern void CL_ClearLastLevel(void);
-extern int checkminimumplayers_time;
-extern void G_ClearVehicles(void);
-
-namespace game 
-{
-	extern void BG_ClearVehicleLoadInfo(void);
-}
-
-extern int g_duelPrintTimer;
-
-void SV_ClearLastLevel(void)
-{
-	CL_ClearLastLevel();
-	game::BG_ClearVehicleLoadInfo();
-	NAV_Free();
-	checkminimumplayers_time = 0;
-	G_ClearVehicles();
-
-	int i;
-	for ( i = 0 ; i < MAX_CONFIGSTRINGS ; i++ ) {
-		if ( sv.configstrings[i] ) {
-			Z_Free( sv.configstrings[i] );
-			sv.configstrings[i] = NULL;
-		}
-	}
-
-	g_duelPrintTimer	= 0;
-}
-#endif
-
-
-/*
-================
-SV_DedicatedSpawn
-
-Clean up and init the needed data for dedicated server mode
-================
-*/
-namespace ui
-{
-extern void Menus_OpenByName(const char *p);
-extern void Menus_CloseAll( void );
-}
-
-void SV_DedicatedSpawn(char* map)
-{
-	//turn off dedicated flag so textures will load
-	Cvar_Set("dedicated", "0");
-
-	//clear and restart the render system
-	extern void CL_InitRenderer( void );
-	CL_InitRenderer();
-
-	// Register sounds, so that muting is turned off and UI sounds work
-	cls.soundRegistered = qtrue;
-	S_BeginRegistration(ClientManager::NumClients());
-
-	//clear out & init ghoul2 system
-//	G2API_CleanG2(G2_CLEAN_ALL);
-
-//	com_serverGhoulInit = true;
-//	com_serverGhoulShutdown = false;
-
-	//reload menu stuff
-	VM_Call( uivm, UI_INIT, 0 );
-	VM_Call( uivm, UI_SET_ACTIVE_MENU, UIMENU_DEDICATED );
-
-	//jsw//clear out the socket buffers for voice in case they got filled while loading
-//	g_Voice.EmptyVoiceBuffer();
-//	g_Voice.StartVoice();
-//	g_Voice.VerifyPlayerList();
-	
-	//reset dedicated flag so no other textures will load
-	Cvar_Set( "dedicated", "1");
-}
-
-void SV_FixBrokenRules( void )
-{
-	int gt = Cvar_VariableIntegerValue( "g_gametype" );
-	if( gt == GT_DUEL || gt == GT_POWERDUEL )
-	{
-		Cvar_SetValue( "fraglimit", 1 );
-		Cvar_SetValue( "timelimit", 0 );
-	}
-}
-
 /*
 ================
 SV_SpawnServer
@@ -579,11 +477,6 @@ Ghoul2 Insert End
 
 	SV_SendMapChange();
 
-#ifdef _XBOX
-	// disable vsync during load for speed
-	qglDisable(GL_VSYNC);
-#endif
-
 	// if not running a dedicated server CL_MapLoading will connect the client to the server
 	// also print some status stuff
 	CL_MapLoading();
@@ -595,42 +488,11 @@ Ghoul2 Insert End
 
 	CM_ClearMap();
 
-#ifdef _XBOX
-	R_DeleteTextures();
-#endif
-
 	// clear the whole hunk because we're (re)loading the server
 	Hunk_Clear();
 
-#ifdef _XBOX
-	SV_ClearLastLevel();
-	ClientManager::ActivateClient(0);
-#endif
-
 	R_InitSkins();
 	R_InitShaders(qtrue);
-
-	// This was in SV_DedicatedSpawn, but it gets in the way of my memory maps:
-	if( com_dedicated->integer )
-	{
-		// Textures have been blown away - need to kill font system so it
-		// will re-register shaders when UI re-scans menu files below:
-		extern void R_ShutdownFonts( void );
-		R_ShutdownFonts();
-	}
-
-	ClientManager::ClientActiveRelocate( !com_dedicated->integer && !ClientManager::splitScreenMode );
-
-#if defined(_XBOX) && !defined(FINAL_BUILD)
-	//Useful for memory debugging.  Please don't delete.  Comment out if
-	//necessary.
-	extern void Z_DisplayLevelMemory(int, int, int);
-	extern void Z_Details_f(void);
-	extern void Z_TagPointers(memtag_t);
-	Z_DisplayLevelMemory(0, 0, 0);
-	Z_TagPointers( TAG_ALL );
-	Z_Details_f();
-#endif
 
 	// init client structures and svs.numSnapshotEntities 
 	if ( !Cvar_VariableValue("sv_running") ) {
@@ -641,16 +503,6 @@ Ghoul2 Insert End
 			SV_ChangeMaxClients();
 		}
 	}
-
-	// Do dedicated server-specific startup
-	if ( com_dedicated->integer )
-	{
-		SV_DedicatedSpawn(server);
-	}
-
-	// Xbox - Correct various problems with broken rules settings when people
-	// change gametype in-game, etc...
-	SV_FixBrokenRules();
 
 	SV_SendMapChange();
 
@@ -725,17 +577,7 @@ Ghoul2 Insert End
 	sv.checksumFeed = ( ((int) rand() << 16) ^ rand() ) ^ Com_Milliseconds();
 	FS_Restart( sv.checksumFeed );
 
-#ifdef _XBOX
-	CL_StartHunkUsers();
 	CM_LoadMap( va("maps/%s.bsp", server), qfalse, &checksum );
-//	RE_LoadWorldMap(va("maps/%s.bsp", server));
-
-	// Start up voice system if it isn't running yet. (ie, if we're on syslink)
-	if( !logged_on )
-		g_Voice.Initialize();
-#else
-	CM_LoadMap( va("maps/%s.bsp", server), qfalse, &checksum );
-#endif
 
 	SV_SendMapChange();
 
@@ -800,8 +642,7 @@ Ghoul2 Insert End
 			if ( denied ) {
 				// this generally shouldn't happen, because the client
 				// was connected before the level change
-//				SV_DropClient( &svs.clients[i], denied );
-				SV_DropClient( &svs.clients[i], "@MENUS_LOST_CONNECTION" );
+				SV_DropClient( &svs.clients[i], denied );
 			} else {
 				if( !isBot ) {
 					// when we get the next packet from a connected client,
@@ -888,44 +729,6 @@ Ghoul2 Insert End
 		CL_StartHunkUsers();
 	}
 	*/
-
-	// Xbox - Dedicated servers need to do extra work here. Most of this is done in
-	// cl_parse normally, but that never runs in this case:
-	if ( com_dedicated->integer )
-	{
-		// Normally, we start advertising when we get the first snapshot.
-		// Do it now. This is also necessary so that Net_GetXNKID works below.
-		XBL_MM_Advertise();
-
-		// We need to put ourselves into the playerlist.
-		xbOnlineInfo.localIndex = DEDICATED_SERVER_INDEX;
-
-		XBPlayerInfo *plyrInfo = &xbOnlineInfo.xbPlayerList[DEDICATED_SERVER_INDEX];
-		memset( plyrInfo, 0, sizeof(XBPlayerInfo) );
-
-		// We get the first refIndex
-		plyrInfo->refIndex = svs.clientRefNum++;
-
-		// Address information
-		plyrInfo->xbAddr = *Net_GetXNADDR( NULL );
-		XNetXnAddrToInAddr( &plyrInfo->xbAddr, Net_GetXNKID(), &plyrInfo->inAddr );
-
-		// Gamertag and XUID
-		Q_strncpyz( plyrInfo->name, Cvar_VariableString("name"), sizeof(plyrInfo->name) );
-		XONLINE_USER *pUser;
-		if (logged_on && (pUser = &XBLLoggedOnUsers[ IN_GetMainController() ]) && (pUser->hr == S_OK))
-			plyrInfo->xuid = pUser->xuid;
-		else
-			plyrInfo->xuid.qwUserID = plyrInfo->refIndex;
-
-		plyrInfo->isActive = true;
-
-		// Start up the voice chat session
-		g_Voice.JoinSession();
-
-		// And mark ourselves as playing, so that others can join our game:
-		XBL_F_SetState( XONLINE_FRIENDSTATE_FLAG_PLAYING, true );
-	}
 }
 
 
@@ -945,24 +748,16 @@ void SV_Init (void) {
 	Cvar_Get ("dmflags", "0", CVAR_SERVERINFO);
 	Cvar_Get ("fraglimit", "20", CVAR_SERVERINFO);
 	Cvar_Get ("timelimit", "0", CVAR_SERVERINFO);
+	Cvar_Get ("capturelimit", "0", CVAR_SERVERINFO);
 	
 	// Get these to establish them and to make sure they have a default before the menus decide to stomp them.
-//	Cvar_Get ("g_maxHolocronCarry", "3", CVAR_SERVERINFO);
+	Cvar_Get ("g_maxHolocronCarry", "3", CVAR_SERVERINFO);
 	Cvar_Get ("g_privateDuel", "1", CVAR_SERVERINFO );
 	Cvar_Get ("g_saberLocking", "1", CVAR_SERVERINFO );
 	Cvar_Get ("g_maxForceRank", "6", CVAR_SERVERINFO );
 	Cvar_Get ("duel_fraglimit", "10", CVAR_SERVERINFO);
 	Cvar_Get ("g_forceBasedTeams", "0", CVAR_SERVERINFO);
 	Cvar_Get ("g_duelWeaponDisable", "1", CVAR_SERVERINFO);
-
-	// Fix up g_duelWeaponDisable so it's always correct:
-	int weaponDisable = 0;
-	for( int i = 0; i < WP_NUM_WEAPONS; i++ )
-	{
-		if( i != WP_SABER )
-			weaponDisable |= (1<<i);
-	}
-	Cvar_SetValue( "g_duelWeaponDisable", weaponDisable );
 
 	sv_gametype = Cvar_Get ("g_gametype", "0", CVAR_SERVERINFO | CVAR_LATCH );
 	sv_needpass = Cvar_Get ("g_needpass", "0", CVAR_SERVERINFO | CVAR_ROM );
@@ -976,13 +771,8 @@ void SV_Init (void) {
 	sv_minPing = Cvar_Get ("sv_minPing", "0", CVAR_ARCHIVE | CVAR_SERVERINFO );
 	sv_maxPing = Cvar_Get ("sv_maxPing", "0", CVAR_ARCHIVE | CVAR_SERVERINFO );
 	sv_floodProtect = Cvar_Get ("sv_floodProtect", "1", CVAR_ARCHIVE | CVAR_SERVERINFO );
-	sv_allowAnonymous = Cvar_Get ("sv_allowAnonymous", "0", CVAR_SERVERINFO);
-
-	// Live/SystemLink/SplitScreen/BotMatch
-	xb_gameType = Cvar_Get("xb_gameType", "0", CVAR_ARCHIVE);
-
 	// systeminfo
-	Cvar_Get ("sv_cheats", "0", CVAR_SYSTEMINFO | CVAR_ROM );
+	Cvar_Get ("sv_cheats", "1", CVAR_SYSTEMINFO | CVAR_ROM );
 	sv_serverid = Cvar_Get ("sv_serverid", "0", CVAR_SYSTEMINFO | CVAR_ROM );
 #ifndef DLL_ONLY // bk010216 - for DLL-only servers
 	sv_pure = Cvar_Get ("sv_pure", "1", CVAR_SYSTEMINFO );
@@ -1002,14 +792,12 @@ void SV_Init (void) {
 	sv_zombietime = Cvar_Get ("sv_zombietime", "2", CVAR_TEMP );
 	Cvar_Get ("nextmap", "", CVAR_TEMP );
 
-#ifndef _XBOX	// No master or downloads on Xbox
 	sv_allowDownload = Cvar_Get ("sv_allowDownload", "0", CVAR_SERVERINFO);
 	sv_master[0] = Cvar_Get ("sv_master1", MASTER_SERVER_NAME, 0 );
 	sv_master[1] = Cvar_Get ("sv_master2", "", CVAR_ARCHIVE );
 	sv_master[2] = Cvar_Get ("sv_master3", "", CVAR_ARCHIVE );
 	sv_master[3] = Cvar_Get ("sv_master4", "", CVAR_ARCHIVE );
 	sv_master[4] = Cvar_Get ("sv_master5", "", CVAR_ARCHIVE );
-#endif
 	sv_reconnectlimit = Cvar_Get ("sv_reconnectlimit", "3", 0);
 	sv_showghoultraces = Cvar_Get ("sv_showghoultraces", "0", 0);
 	sv_showloss = Cvar_Get ("sv_showloss", "0", 0);
@@ -1025,9 +813,6 @@ void SV_Init (void) {
 	// init the botlib here because we need the pre-compiler in the UI
 	SV_BotInitBotLib();
 
-#ifdef _XBOX
-	svs.clientRefNum = 0;
-#endif
 	// Only allocated once, no point in moving it around and fragmenting
 	// create a heap for Ghoul2 to use for game side model vertex transforms used in collision detection
 	G2VertSpaceServer = &CMiniHeap_singleton;
@@ -1044,16 +829,10 @@ not just stuck on the outgoing message list, because the server is going
 to totally exit after returning from this function.
 ==================
 */
-bool dontSendFinalMessage = false;
 void SV_FinalMessage( char *message ) {
 	int			i, j;
 	client_t	*cl;
-
-	if(dontSendFinalMessage) {
-		return;
-	}
 	
-	dontSendFinalMessage = true;
 	// send it twice, ignoring rate
 	for ( j = 0 ; j < 2 ; j++ ) {
 		for (i=0, cl = svs.clients ; i < sv_maxclients->integer ; i++, cl++) {
@@ -1061,7 +840,7 @@ void SV_FinalMessage( char *message ) {
 				// don't send a disconnect to a local client
 				if ( cl->netchan.remoteAddress.type != NA_LOOPBACK ) {
 					SV_SendServerCommand( cl, "print \"%s\"", message );
-					SV_SendServerCommand( cl, "disconnect @MENUS_LOST_CONNECTION" );
+					SV_SendServerCommand( cl, "disconnect" );
 				}
 				// force a snapshot to be sent
 				cl->nextSnapshotTime = -1;
@@ -1069,7 +848,6 @@ void SV_FinalMessage( char *message ) {
 			}
 		}
 	}
-	dontSendFinalMessage = false;
 }
 
 
@@ -1090,16 +868,12 @@ void SV_Shutdown( char *finalmsg )
 
 //	Com_Printf( "----- Server Shutdown -----\n" );
 
-	//Replaced com_errorEntered check with a recursion check inside
-	//SV_FinalMessage.  How else can the clients know to disconnect?
-	if ( svs.clients/* && !com_errorEntered*/ ) {
+	if ( svs.clients && !com_errorEntered ) {
 		SV_FinalMessage( finalmsg );
 	}
 
 	SV_RemoveOperatorCommands();
-#ifndef _XBOX	// No master on Xbox
 	SV_MasterShutdown();
-#endif
 	SV_ShutdownGameProgs();
 /*
 Ghoul2 Insert Start
@@ -1125,30 +899,6 @@ Ghoul2 Insert Start
 	Cvar_Set("ui_singlePlayerActive", "0");
 
 //	Com_Printf( "---------------------------\n" );
-
-#ifdef _XBOX
-	// If we were advertising on Live, remove the listing. This also unregisters
-	// the server's key. SysLink keys are never unregistered, so we don't do anything
-	// special here for them.
-	if ( logged_on )
-		XBL_MM_Shutdown( true );
-
-	// Leave the voice session
-	g_Voice.LeaveSession();
-
-	// Tear down voice now if we're on system link (Live keeps it active)
-	if( !logged_on )
-		g_Voice.Shutdown();
-
-	if( logged_on )
-	{
-		XBL_F_OnClientLeaveSession();
-		XBL_PL_OnClientLeaveSession();
-	}
-
-	// Wipe our player list - this is important
-	memset( &xbOnlineInfo, 0, sizeof(xbOnlineInfo) );
-#endif
 
 	// disconnect any local clients
 	CL_Disconnect( qfalse );

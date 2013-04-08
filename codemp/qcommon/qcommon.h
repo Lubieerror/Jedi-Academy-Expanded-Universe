@@ -2,12 +2,8 @@
 #ifndef _QCOMMON_H_
 #define _QCOMMON_H_
 
-#include "../qcommon/cm_public.h"
-#include "../game/q_shared.h"
-
-//#define	PRE_RELEASE_DEMO
-
-//#define		USE_CD_KEY
+#include "qcommon/cm_public.h"
+#include "qcommon/q_shared.h"
 
 //============================================================================
 
@@ -103,8 +99,7 @@ NET
 
 #define	PORT_ANY			-1
 
-//#define	MAX_RELIABLE_COMMANDS	128			// max string commands buffered for restransmit
-#define	MAX_RELIABLE_COMMANDS	64			// max string commands buffered for restransmit
+#define	MAX_RELIABLE_COMMANDS	128			// max string commands buffered for restransmit
 
 typedef enum {
 	NA_BOT,
@@ -135,10 +130,9 @@ void		NET_Shutdown( void );
 void		NET_Restart( void );
 void		NET_Config( qboolean enableNetworking );
 
-bool		NET_SendPacket (netsrc_t sock, int length, const void *data, netadr_t to);
+void		NET_SendPacket (netsrc_t sock, int length, const void *data, netadr_t to);
 void		QDECL NET_OutOfBandPrint( netsrc_t net_socket, netadr_t adr, const char *format, ...);
-void		QDECL NET_BroadcastPrint( netsrc_t net_socket, const char *format, ...);
-bool		QDECL NET_OutOfBandData( netsrc_t sock, netadr_t adr, byte *format, int len );
+void		QDECL NET_OutOfBandData( netsrc_t sock, netadr_t adr, byte *format, int len );
 
 qboolean	NET_CompareAdr (netadr_t a, netadr_t b);
 qboolean	NET_CompareBaseAdr (netadr_t a, netadr_t b);
@@ -148,13 +142,8 @@ qboolean	NET_StringToAdr ( const char *s, netadr_t *a);
 qboolean	NET_GetLoopPacket (netsrc_t sock, netadr_t *net_from, msg_t *net_message);
 void		NET_Sleep(int msec);
 
-extern byte	broadcast_nonce[8];
 
-//#define	MAX_MSGLEN				49152		// max length of a message, which may
-											// be fragmented into multiple packets
-
-// What the fuck? I haven't seen a message bigger than 9k. Let's increase when we NEED to, eh?
-#define	MAX_MSGLEN				16384		// max length of a message, which may
+#define	MAX_MSGLEN				49152		// max length of a message, which may
 											// be fragmented into multiple packets
 
 //rww - 6/28/02 - Changed from 16384 to match sof2's. This does seem rather huge, but I guess it doesn't really hurt anything.
@@ -195,8 +184,8 @@ typedef struct {
 void Netchan_Init( int qport );
 void Netchan_Setup( netsrc_t sock, netchan_t *chan, netadr_t adr, int qport );
 
-bool Netchan_Transmit( netchan_t *chan, int length, const byte *data );
-bool Netchan_TransmitNextFragment( netchan_t *chan );
+void Netchan_Transmit( netchan_t *chan, int length, const byte *data );
+void Netchan_TransmitNextFragment( netchan_t *chan );
 
 qboolean Netchan_Process( netchan_t *chan, msg_t *msg );
 
@@ -209,31 +198,16 @@ PROTOCOL
 ==============================================================
 */
 
-#define	PROTOCOL_VERSION	25
+#define	PROTOCOL_VERSION	26
 
-#ifndef _XBOX	// No gethostbyname(), and can't really use this stuff
 #define	UPDATE_SERVER_NAME		"updatejk3.ravensoft.com"
 #define MASTER_SERVER_NAME		"masterjk3.ravensoft.com"
 
-#ifdef USE_CD_KEY
-#define	AUTHORIZE_SERVER_NAME	"authorizejk3.ravensoft.com"
-#endif
-#endif	// _XBOX
-
-#ifdef _XBOX	// Use port number 1000 for less bandwidth!
-#define	PORT_SERVER			1000
-#define NUM_SERVER_PORTS	1
-// Some random port number in the 1000-1255 range for session discovery:
-#define PORT_BROADCAST		1007
-#else
 #define	PORT_MASTER			29060
 #define	PORT_UPDATE			29061
 //#define	PORT_AUTHORIZE		29062
 #define	PORT_SERVER			29070	//...+9 more for multiple servers
-#define	NUM_SERVER_PORTS	4		// broadcast scan this many ports after
-									// PORT_SERVER so a single machine can
-									// run multiple servers
-#endif
+#define	NUM_SERVER_PORTS	4		// broadcast scan this many ports after PORT_SERVER so a single machine can run multiple servers
 
 // the svc_strings[] array in cl_parse.c should mirror this
 //
@@ -250,21 +224,6 @@ enum svc_ops_e {
 	svc_snapshot,
 	svc_setgame,
 	svc_mapchange,
-#ifdef _XBOX
-	svc_newpeer,				//jsw//inform current clients about new player
-	svc_removepeer,				//jsw//inform current clients about dying player
-	svc_xbInfo,					//jsw//update client with current server xbOnlineInfo
-	svc_plyrPos0,				// BTO - All client positions, used for voice proximity
-	svc_plyrPos1,				// BTO - All client positions, used for voice proximity
-	svc_plyrPos2,				// BTO - All client positions, used for voice proximity
-	svc_plyrPos3,				// BTO - All client positions, used for voice proximity
-	svc_plyrPos4,				// BTO - All client positions, used for voice proximity
-	svc_plyrPos5,				// BTO - All client positions, used for voice proximity
-	svc_plyrPos6,				// BTO - All client positions, used for voice proximity
-	svc_plyrPos7,				// BTO - All client positions, used for voice proximity
-	svc_plyrPos8,				// BTO - All client positions, used for voice proximity
-	svc_plyrPos9,				// BTO - All client positions, used for voice proximity
-#endif
 	svc_EOF
 };
 
@@ -401,11 +360,14 @@ void	Cmd_ArgvBuffer( int arg, char *buffer, int bufferLength );
 char	*Cmd_Args (void);
 char	*Cmd_ArgsFrom( int arg );
 void	Cmd_ArgsBuffer( char *buffer, int bufferLength );
+char	*Cmd_Cmd (void);
+void	Cmd_Args_Sanitize( void );
 // The functions that execute commands get their parameters with these
 // functions. Cmd_Argv () will return an empty string, not a NULL
 // if arg > argc, so string operations are allways safe.
 
 void	Cmd_TokenizeString( const char *text );
+void	Cmd_TokenizeStringIgnoreQuotes( const char *text_in );
 // Takes a null terminated string.  Does not need to be /n terminated.
 // breaks the string up into arg tokens.
 
@@ -456,11 +418,26 @@ void	Cvar_Update( vmCvar_t *vmCvar );
 void 	Cvar_Set( const char *var_name, const char *value );
 // will create the variable with no flags if it doesn't exist
 
+cvar_t	*Cvar_Set2(const char *var_name, const char *value, qboolean force);
+// same as Cvar_Set, but allows more control over setting of cvar
+
+void	Cvar_SetSafe( const char *var_name, const char *value );
+// sometimes we set variables from an untrusted source: fail if flags & CVAR_PROTECTED
+
+cvar_t	*Cvar_Set2Safe( const char *var_name, const char *value, qboolean force );
+// same as Cvar_Set, but allows more control over setting of cvar
+// sometimes we set variables from an untrusted source: fail if flags & CVAR_PROTECTED
+
 void Cvar_SetLatched( const char *var_name, const char *value);
 // don't set the cvar immediately
 
 void	Cvar_SetValue( const char *var_name, float value );
-// expands value to a string and calls Cvar_Set
+void	Cvar_SetValueSafe( const char *var_name, float value );
+// expands value to a string and calls Cvar_Set/Cvar_SetSafe
+
+void Cvar_SetValue2( const char *var_name, float value, qboolean force );
+void Cvar_SetValue2Safe( const char *var_name, float value, qboolean force );
+// expands value to a string and calls Cvar_Set2/Cvar_Set2Safe
 
 float	Cvar_VariableValue( const char *var_name );
 int		Cvar_VariableIntegerValue( const char *var_name );
@@ -470,10 +447,14 @@ char	*Cvar_VariableString( const char *var_name );
 void	Cvar_VariableStringBuffer( const char *var_name, char *buffer, int bufsize );
 // returns an empty string if not defined
 
+int	Cvar_Flags(const char *var_name);
+// returns CVAR_NONEXISTENT if cvar doesn't exist or the flags of that particular CVAR.
+
 void	Cvar_CommandCompletion( void(*callback)(const char *s) );
 // callback with each valid string
 
 void 	Cvar_Reset( const char *var_name );
+void 	Cvar_ForceReset( const char *var_name );
 
 void	Cvar_SetCheatState( void );
 // reset all testing vars to a safe value
@@ -495,6 +476,7 @@ char	*Cvar_InfoString_Big( int bit );
 // in their flags ( CVAR_USERINFO, CVAR_SERVERINFO, CVAR_SYSTEMINFO, etc )
 void	Cvar_InfoStringBuffer( int bit, char *buff, int buffsize );
 
+void	Cvar_Restart(qboolean unsetVM);
 void	Cvar_Restart_f( void );
 
 extern	int			cvar_modifiedFlags;
@@ -523,11 +505,7 @@ issues.
 // number of id paks that will never be autodownloaded from base
 #define NUM_ID_PAKS		9
 
-#ifdef _XBOX
-#define MAX_FILE_HANDLES	16
-#else
 #define	MAX_FILE_HANDLES	64
-#endif
 
 qboolean FS_Initialized();
 
@@ -641,6 +619,7 @@ void FS_PureServerSetLoadedPaks( const char *pakSums, const char *pakNames );
 // separated checksums will be checked for files, with the
 // sole exception of .cfg files.
 
+qboolean FS_CheckDirTraversal(const char *checkdir);
 qboolean FS_idPak( char *pak, char *base );
 qboolean FS_ComparePaks( char *neededpaks, int len, qboolean dlstring );
 void FS_Rename( const char *from, const char *to );
@@ -684,7 +663,6 @@ void		Info_Print( const char *s );
 void		Com_BeginRedirect (char *buffer, int buffersize, void (*flush)(char *));
 void		Com_EndRedirect( void );
 void 		QDECL Com_Printf( const char *fmt, ... );
-void 		QDECL Com_PrintfAlways( const char *fmt, ... );
 void 		QDECL Com_DPrintf( const char *fmt, ... );
 void		QDECL Com_OPrintf( const char *fmt, ...); // Outputs to the VC / Windows Debug window (only in debug compile)
 void 		QDECL Com_Error( int code, const char *fmt, ... );
@@ -719,6 +697,8 @@ extern	cvar_t	*com_buildScript;		// for building release pak files
 extern	cvar_t	*com_journal;
 extern	cvar_t	*com_cameraMode;
 
+extern	cvar_t	*com_optvehtrace;
+
 #ifdef G2_PERFORMANCE_ANALYSIS
 extern	cvar_t	*com_G2Report;
 #endif
@@ -740,11 +720,9 @@ extern	int		com_frameMsec;
 extern	qboolean	com_errorEntered;
 
 
-#ifndef _XBOX
 extern	fileHandle_t	logfile;
 extern	fileHandle_t	com_journalFile;
 extern	fileHandle_t	com_journalDataFile;
-#endif
 
 /*
 typedef enum {
@@ -814,10 +792,6 @@ int   Z_MemSize	( memtag_t eTag );
 void  Z_TagFree	( memtag_t eTag );
 void  Z_Free	( void *ptr );
 int	  Z_Size	( void *pvAddress);
-
-void Z_PushNewDeleteTag( memtag_t eTag );
-void Z_PopNewDeleteTag( void );
-
 void Com_InitZoneMemory(void);
 void Com_InitHunkMemory(void);
 void Com_ShutdownZoneMemory(void);
@@ -862,7 +836,7 @@ void CL_InitKeyCommands( void );
 // config files, but the rest of client startup will happen later
 
 void CL_Init( void );
-void CL_Disconnect( qboolean showMainMenu, qboolean deleteTextures = qtrue );
+void CL_Disconnect( qboolean showMainMenu );
 void CL_Shutdown( void );
 void CL_Frame( int msec );
 qboolean CL_GameCommand( void );
@@ -877,7 +851,7 @@ void CL_JoystickEvent( int axis, int value, int time );
 
 void CL_PacketEvent( netadr_t from, msg_t *msg );
 
-void CL_ConsolePrint( const char *text, qboolean silent );
+void CL_ConsolePrint( const char *text );
 
 void CL_MapLoading( void );
 // do a screen update before starting to load a map
@@ -922,7 +896,6 @@ qboolean SV_GameCommand( void );
 // UI interface
 //
 qboolean UI_GameCommand( void );
-qboolean UI_usesUniqueCDKey();
 
 /*
 ==============================================================
@@ -950,8 +923,7 @@ typedef enum {
 	SE_MOUSE,	// evValue and evValue2 are reletive signed x / y moves
 	SE_JOYSTICK_AXIS,	// evValue is an axis number and evValue2 is the current state (-127 to 127)
 	SE_CONSOLE,	// evPtr is a char*
-	SE_PACKET,	// evPtr is a netadr_t followed by data bytes to evPtrLength
-	SE_BROADCAST_PACKET	// same as SE_PACKET - but came from our broadcast socket
+	SE_PACKET	// evPtr is a netadr_t followed by data bytes to evPtrLength
 } sysEventType_t;
 
 typedef struct {
@@ -991,10 +963,6 @@ void	Sys_Quit (void);
 char	*Sys_GetClipboardData( void );	// note that this isn't journaled...
 
 void	Sys_Print( const char *msg );
-#ifdef _XBOX
-void	Sys_Log( const char *file, const char *msg );
-void	Sys_Log( const char *file, const void *buffer, int size, bool flush );
-#endif
 
 // Sys_Milliseconds should only be used for profiling purposes,
 // any game related timing information should come from event timestamps
@@ -1022,11 +990,7 @@ void	Sys_StreamSeek( fileHandle_t f, int offset, int origin );
 void	Sys_ShowConsole( int level, qboolean quitOnClose );
 void	Sys_SetErrorText( const char *text );
 
-bool	Sys_SendPacket( int length, const void *data, netadr_t to );
-void	Sys_SendBroadcastPacket( int length, const void *data );
-#ifdef _XBOX
-void	Sys_SendVoicePacket( int length, const void *data, netadr_t to );
-#endif
+void	Sys_SendPacket( int length, const void *data, netadr_t to );
 
 qboolean	Sys_StringToAdr( const char *s, netadr_t *a );
 //Does NOT parse port numbers, only base addresses.
@@ -1034,9 +998,7 @@ qboolean	Sys_StringToAdr( const char *s, netadr_t *a );
 qboolean	Sys_IsLANAddress (netadr_t adr);
 void		Sys_ShowIP(void);
 
-qboolean	Sys_CheckCD( void );
-
-void	Sys_Mkdir( const char *path );
+qboolean	Sys_Mkdir( const char *path );
 char	*Sys_Cwd( void );
 void	Sys_SetDefaultCDPath(const char *path);
 char	*Sys_DefaultCDPath(void);
@@ -1053,13 +1015,8 @@ void	Sys_FreeFileList( char **fileList );
 void	Sys_BeginProfiling( void );
 void	Sys_EndProfiling( void );
 
-int Sys_FunctionCmp(void *f1, void *f2);
-int Sys_FunctionCheckSum(void *f1);
-
 qboolean Sys_LowPhysicalMemory();
 unsigned int Sys_ProcessorCount();
-
-int Sys_MonkeyShouldBeSpanked( void );
 
 /* This is based on the Adaptive Huffman algorithm described in Sayood's Data
  * Compression book.  The ranks are not actually stored, but implicitly defined
@@ -1119,40 +1076,4 @@ inline int Round(float value)
 {
 	return((int)floorf(value + 0.5f));
 }
-
-#ifdef _XBOX
-//////////////////////////////
-//
-// Map Lump Loader
-//
-struct Lump
-{
-	void* data;
-	int len;
-	
-	Lump() : data(NULL), len(0) {}
-	~Lump() { clear(); }
-
-	void load(const char* map, const char* lump)
-	{
-		clear();
-
-		char path[MAX_QPATH];
-		Com_sprintf(path, MAX_QPATH, "%s/%s.mle", map, lump);
-
-		len = FS_ReadFile(path, &data);
-		if (len < 0) len = 0;
-	}
-
-	void clear(void)
-	{
-		if (data)
-		{
-			FS_FreeFile(data);
-			data = NULL;
-		}
-	}
-};
-#endif _XBOX
-
 #endif // _QCOMMON_H_

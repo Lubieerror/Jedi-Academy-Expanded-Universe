@@ -6,10 +6,9 @@
 #include "g_local.h"
 #include "be_aas.h"
 #include "bg_saga.h"
-#include "../ghoul2/G2.h"
-#include "q_shared.h"
+#include "ghoul2/G2.h"
+#include "qcommon/q_shared.h"
 
-static	float	s_quadFactor;
 static	vec3_t	forward, vright, up;
 static	vec3_t	muzzle;
 
@@ -449,7 +448,7 @@ void WP_FireEmplacedMissile( gentity_t *ent, vec3_t start, vec3_t dir, qboolean 
 static void WP_FireBlaster( gentity_t *ent, qboolean altFire )
 //---------------------------------------------------------
 {
-	vec3_t	dir, angs;
+	vec3_t  dir, angs;
 
 	vectoangles( forward, angs );
 
@@ -457,7 +456,7 @@ static void WP_FireBlaster( gentity_t *ent, qboolean altFire )
 	{
 		// add some slop to the alt-fire direction
 		angs[PITCH] += crandom() * BLASTER_SPREAD;
-		angs[YAW]	+= crandom() * BLASTER_SPREAD;
+		angs[YAW]       += crandom() * BLASTER_SPREAD;
 	}
 
 	AngleVectors( angs, dir, NULL, NULL );
@@ -465,7 +464,6 @@ static void WP_FireBlaster( gentity_t *ent, qboolean altFire )
 	// FIXME: if temp_org does not have clear trace to inside the bbox, don't shoot!
 	WP_FireBlasterMissile( ent, muzzle, dir, altFire );
 }
-
 
 
 int G_GetHitLocation(gentity_t *target, vec3_t ppoint);
@@ -564,6 +562,8 @@ static void WP_DisruptorMainFire( gentity_t *ent )
 					te->s.angles[1] = 1;
 				}
 				te->s.eventParm = 0;
+				te->s.weapon = 0;//saberNum
+				te->s.legsAnim = 0;//bladeNum
 
 				return;
 			}
@@ -713,6 +713,10 @@ void WP_DisruptorAltFire( gentity_t *ent )
 			trap_Trace( &tr, start, NULL, NULL, end, skip, MASK_SHOT );
 		}
 
+		// fix: shooting ourselves shouldn't be allowed 
+		if (tr.entityNum == ent->s.number)
+			break;
+
 		traceEnt = &g_entities[tr.entityNum];
 
 		if (d_projectileGhoul2Collision.integer && traceEnt->inuse && traceEnt->client)
@@ -767,6 +771,8 @@ void WP_DisruptorAltFire( gentity_t *ent )
 					te->s.angles[1] = 1;
 				}
 				te->s.eventParm = 0;
+				te->s.weapon = 0;//saberNum
+				te->s.legsAnim = 0;//bladeNum
 
 				return;
 			}
@@ -1701,6 +1707,38 @@ void rocketThink( gentity_t *ent )
 
 		// Now the rocket can't do a 180 in space, so we'll limit the turn to about 45 degrees.
 		dot = DotProduct( targetdir, ent->movedir );
+		if ( (ent->spawnflags&1) )
+		{//vehicle rocket
+			if ( ent->radius > -1.0f )
+			{//can lose the lock if DotProduct drops below this number
+				if ( dot < ent->radius )
+				{//lost the lock!!!
+					//HMM... maybe can re-lock on if they come in front again?
+					/*
+					//OR: should it stop trying to lock altogether?
+					if ( ent->genericValue1 )
+					{//have a timelimit, set next think to that
+						ent->nextthink = ent->genericValue1;
+						if ( ent->genericValue2 )
+						{//explode when die
+							ent->think = G_ExplodeMissile;
+						}
+						else
+						{
+							ent->think = G_FreeEntity;
+						}
+					}
+					else
+					{
+						ent->think = NULL;
+						ent->nextthink = -1;
+					}
+					*/
+					return;
+				}
+			}
+		}
+
 
 		// a dot of 1.0 means right-on-target.
 		if ( dot < 0.0f )
@@ -1799,7 +1837,7 @@ static void WP_FireRocket( gentity_t *ent, qboolean altFire )
 		vel *= 0.5f;
 	}
 
-	missile = CreateMissile( muzzle, forward, vel, 10000, ent, altFire );
+	missile = CreateMissile( muzzle, forward, vel, 30000, ent, altFire );
 
 	if (ent->client && ent->client->ps.rocketLockIndex != ENTITYNUM_NONE)
 	{
@@ -2632,7 +2670,7 @@ void charge_stick (gentity_t *self, gentity_t *other, trace_t *trace)
 		VectorNPos(self->s.pos.trDelta, tN);
 		self->s.pos.trDelta[0] += vNor[0]*(tN[0]*(((float)Q_irand(1, 10))*0.1));
 		self->s.pos.trDelta[1] += vNor[1]*(tN[1]*(((float)Q_irand(1, 10))*0.1));
-		self->s.pos.trDelta[2] += vNor[1]*(tN[2]*(((float)Q_irand(1, 10))*0.1));
+		self->s.pos.trDelta[2] += vNor[2]*(tN[2]*(((float)Q_irand(1, 10))*0.1));
 
 		vectoangles(vNor, self->s.angles);
 		vectoangles(vNor, self->s.apos.trBase);
@@ -2664,10 +2702,21 @@ void charge_stick (gentity_t *self, gentity_t *other, trace_t *trace)
 	}
 
 	//if we get here I guess we hit hte world so we can stick to it
-
-	self->touch = 0;
-	self->think = DetPackBlow;
-	self->nextthink = level.time + 30000;
+	//Raz: This fix requires a bit of explaining..
+	//	When you suicide, all of the detpacks you have placed (either on a wall, or still falling in the air) will
+	//		have their ent->think() set to DetPackBlow and ent->nextthink will be between 100 <-> 300
+	//	If your detpacks land on a surface (i.e. charge_stick gets called) within that 100<->300 ms then ent->think()
+	//		will be overwritten (set to DetpackBlow) and ent->nextthink will be 30000
+	//	The end result is your detpacks won't explode, but will be stuck to the wall for 30 seconds without
+	//		being able to detonate them (or shoot them)
+	//	The fix Sil came up with is to check the think() function in charge_stick, and only overwrite it
+	//		if they haven't been primed to detonate
+	if ( self->think == G_RunObject )
+	{
+		self->touch = 0;
+		self->think = DetPackBlow;
+		self->nextthink = level.time + 30000;
+	}
 
 	VectorClear(self->s.apos.trDelta);
 	self->s.apos.trType = TR_STATIONARY;
@@ -2829,10 +2878,29 @@ void BlowDetpacks(gentity_t *ent)
 		ent->client->ps.hasDetPackPlanted = qfalse;
 	}
 }
+void RemoveDetpacks(gentity_t *ent)
+{
+	gentity_t *found = NULL;
+
+	if ( ent->client->ps.hasDetPackPlanted )
+	{
+		while ( (found = G_Find( found, FOFS(classname), "detpack") ) != NULL )
+		{//loop through all ents and blow the crap out of them!
+			if ( found->parent == ent )
+			{
+				VectorCopy( found->r.currentOrigin, found->s.origin );
+				found->think = G_FreeEntity;
+				found->nextthink = level.time;
+			//	G_Sound( found, CHAN_BODY, G_SoundIndex("sound/weapons/detpack/warning.wav") );
+			}
+		}
+		ent->client->ps.hasDetPackPlanted = qfalse;
+	}
+}
 
 qboolean CheatsOn(void) 
 {
-	if ( !g_cheats.integer )
+	if ( !sv_cheats.integer )
 	{
 		return qfalse;
 	}
@@ -2925,7 +2993,6 @@ void WP_DropDetPack( gentity_t *ent, qboolean alt_fire )
 	}
 }
 
-#pragma warning(disable : 4701) //local variable may be used without having been initialized
 static void WP_FireConcussionAlt( gentity_t *ent )
 {//a rail-gun-like beam
 	int			damage = CONC_ALT_DAMAGE, skip, traces = DISRUPTOR_ALT_TRACES;
@@ -3186,7 +3253,6 @@ static void WP_FireConcussionAlt( gentity_t *ent )
 	G_PlayEffectID( G_EffectIndex( "concussion/altmuzzle_flash" ), muzzle, forward );
 #endif
 }
-#pragma warning(default : 4701) //local variable may be used without having been initialized
 
 static void WP_FireConcussion( gentity_t *ent )
 {//a fast rocket-like projectile
@@ -3425,9 +3491,9 @@ void SnapVectorTowards( vec3_t v, vec3_t to ) {
 
 	for ( i = 0 ; i < 3 ; i++ ) {
 		if ( to[i] <= v[i] ) {
-			v[i] = (int)v[i];
+			v[i] = floorf( v[i] );
 		} else {
-			v[i] = (int)v[i] + 1;
+			v[i] = ceilf( v[i] );
 		}
 	}
 }
@@ -3748,6 +3814,7 @@ gentity_t *WP_FireVehicleWeapon( gentity_t *ent, vec3_t start, vec3_t dir, vehWe
 						missile->spawnflags |= 1;//just to let it know it should be faster...
 						missile->speed = vehWeapon->fSpeed;
 						missile->angle = vehWeapon->fHoming;
+						missile->radius = vehWeapon->fHomingFOV;
 						//crap, if we have a lifetime, need to store that somewhere else on ent and have rocketThink func check it every frame...
 						if ( vehWeapon->iLifeTime )
 						{//expire after a time
@@ -3851,6 +3918,7 @@ void G_EstimateCamPos( vec3_t viewAngles, vec3_t cameraFocusLoc, float viewheigh
 	cameraFocusAngles[PITCH] += pitchOffset;
 	if ( !bg_fighterAltControl.integer )
 	{//clamp view pitch
+		cameraFocusAngles[PITCH] = AngleNormalize180( cameraFocusAngles[PITCH] );
 		if (cameraFocusAngles[PITCH] > 80.0)
 		{
 			cameraFocusAngles[PITCH] = 80.0;
@@ -3954,13 +4022,34 @@ void WP_GetVehicleCamPos( gentity_t *ent, gentity_t *pilot, vec3_t camPos )
 		}
 	}
 
+	//Control Scheme 3 Method:
+	G_EstimateCamPos( ent->client->ps.viewangles, pilot->client->ps.origin, pilot->client->ps.viewheight, thirdPersonRange, 
+		thirdPersonHorzOffset, vertOffset, pitchOffset, 
+		pilot->s.number, camPos );
+	/*
+	//Control Scheme 2 Method:
 	G_EstimateCamPos( ent->m_pVehicle->m_vOrientation, ent->r.currentOrigin, pilot->client->ps.viewheight, thirdPersonRange, 
 		thirdPersonHorzOffset, vertOffset, pitchOffset, 
 		pilot->s.number, camPos );
+	*/
+}
+
+void WP_VehLeadCrosshairVeh( gentity_t *camTraceEnt, vec3_t newEnd, const vec3_t dir, const vec3_t shotStart, vec3_t shotDir )
+{
+	if ( camTraceEnt 
+		&& camTraceEnt->client
+		&& camTraceEnt->client->NPC_class == CLASS_VEHICLE )
+	{//if the crosshair is on a vehicle, lead it
+		float distAdjust = DotProduct( camTraceEnt->client->ps.velocity, dir );
+		VectorMA( newEnd, distAdjust, dir, newEnd );
+	}
+	VectorSubtract( newEnd, shotStart, shotDir );
+	VectorNormalize( shotDir );
 }
 
 #define MAX_XHAIR_DIST_ACCURACY	20000.0f
 extern float g_cullDistance;
+extern int BG_VehTraceFromCamPos( trace_t *camTrace, bgEntity_t *bgEnt, const vec3_t entOrg, const vec3_t shotStart, const vec3_t end, vec3_t newEnd, vec3_t shotDir, float bestDist );
 qboolean WP_VehCheckTraceFromCamPos( gentity_t *ent, const vec3_t shotStart, vec3_t shotDir )
 {
 	//FIXME: only if dynamicCrosshair and dynamicCrosshairPrecision is on!
@@ -4011,28 +4100,12 @@ qboolean WP_VehCheckTraceFromCamPos( gentity_t *ent, const vec3_t shotStart, vec
 		}
 		else
 		{//NOW do the trace from the camPos and compare with above trace
-			//NOTE: this MUST stay up to date with the method used in CG_ScanForCrosshairEntity (where it checks the doExtraVehTraceFromViewPos bool)
 			trace_t	extraTrace;
-			vec3_t	viewDir2End, extraEnd, camPos;
-			float	minAutoAimDist;
-
-			WP_GetVehicleCamPos( ent, (gentity_t *)ent->m_pVehicle->m_pPilot, camPos );
-			
-			minAutoAimDist = Distance( ent->r.currentOrigin, camPos ) + (ent->m_pVehicle->m_pVehicleInfo->length/2.0f) + 200.0f;
-
-			VectorSubtract( end, camPos, viewDir2End );
-			VectorNormalize( viewDir2End );
-			VectorMA( camPos, MAX_XHAIR_DIST_ACCURACY, viewDir2End, extraEnd );
-			trap_Trace( &extraTrace, camPos, vec3_origin, vec3_origin, extraEnd, 
-				ent->s.number, CONTENTS_SOLID|CONTENTS_BODY );
-			if ( !extraTrace.allsolid
-				&& !extraTrace.startsolid
-				&& extraTrace.fraction < 1.0f
-				&& (extraTrace.fraction*MAX_XHAIR_DIST_ACCURACY) > minAutoAimDist 
-				&& ((extraTrace.fraction*MAX_XHAIR_DIST_ACCURACY)-Distance( ent->r.currentOrigin, camPos )) < (trace.fraction*g_cullDistance) )
-			{//this trace hit *something* that's closer than the thing the main trace hit, so use this result instead
-				VectorSubtract( extraTrace.endpos, shotStart, shotDir );
-				VectorNormalize( shotDir );
+			vec3_t	newEnd;
+			int camTraceEntNum = BG_VehTraceFromCamPos( &extraTrace, (bgEntity_t *)ent, ent->r.currentOrigin, shotStart, end, newEnd, shotDir, (trace.fraction*g_cullDistance) );
+			if ( camTraceEntNum )
+			{
+				WP_VehLeadCrosshairVeh( &g_entities[camTraceEntNum-1], newEnd, dir, shotStart, shotDir );
 				return qtrue;
 			}
 		}
@@ -4225,6 +4298,7 @@ void FireVehicleWeapon( gentity_t *ent, qboolean alt_fire )
 							trace_t trace;
 							vec3_t	end;
 							vec3_t	ang;
+							vec3_t	fixedDir;
 
 							if (pVeh->m_pVehicleInfo->type == VH_SPEEDER)
 							{
@@ -4234,14 +4308,15 @@ void FireVehicleWeapon( gentity_t *ent, qboolean alt_fire )
 							{
 								VectorCopy(pVeh->m_vOrientation, ang);
 							}
-							AngleVectors( ang, dir, NULL, NULL );
-							VectorMA( ent->r.currentOrigin, 32768, dir, end );
+							AngleVectors( ang, fixedDir, NULL, NULL );
+							VectorMA( ent->r.currentOrigin, 32768, fixedDir, end );
 							//VectorMA( ent->r.currentOrigin, 8192, dir, end );
 							trap_Trace( &trace, ent->r.currentOrigin, vec3_origin, vec3_origin, end, ent->s.number, MASK_SHOT );
 							if ( trace.fraction < 1.0f && !trace.allsolid && !trace.startsolid )
 							{
-								VectorSubtract( trace.endpos, start, dir );
-								VectorNormalize( dir );
+								vec3_t newEnd;
+								VectorCopy( trace.endpos, newEnd );
+								WP_VehLeadCrosshairVeh( &g_entities[trace.entityNum], newEnd, fixedDir, start, dir );
 							}
 						}
 
@@ -4343,17 +4418,9 @@ tryFire:
 FireWeapon
 ===============
 */
-#include "../namespace_begin.h"
 int BG_EmplacedView(vec3_t baseAngles, vec3_t angles, float *newYaw, float constraint);
-#include "../namespace_end.h"
 
 void FireWeapon( gentity_t *ent, qboolean altFire ) {
-	if (ent->client->ps.powerups[PW_QUAD] ) {
-		s_quadFactor = g_quadfactor.value;
-	} else {
-		s_quadFactor = 1;
-	}
-
 	// track shots taken for accuracy tracking.  Grapple is not a weapon and gauntet is just not tracked
 	if( ent->s.weapon != WP_SABER && ent->s.weapon != WP_STUN_BATON && ent->s.weapon != WP_MELEE ) 
 	{
@@ -4530,7 +4597,7 @@ void FireWeapon( gentity_t *ent, qboolean altFire ) {
 		}
 	}
 
-//	G_LogWeaponFire(ent->s.number, ent->s.weapon);
+	G_LogWeaponFire(ent->s.number, ent->s.weapon);
 }
 
 //---------------------------------------------------------
@@ -4659,12 +4726,12 @@ void emplaced_gun_use( gentity_t *self, gentity_t *other, trace_t *trace )
 	{ //must be standing
 		return;
 	}
-/*
+
 	if (activator->client->ps.isJediMaster)
 	{ //jm can't use weapons
 		return;
 	}
-*/
+
 	VectorSubtract(self->s.origin, activator->client->ps.origin, vLen);
 	ownLen = VectorLength(vLen);
 

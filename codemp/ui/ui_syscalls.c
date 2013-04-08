@@ -5,10 +5,9 @@
 // this file is only included when building a dll
 // syscalls.asm is included instead when building a qvm
 
-static int (QDECL *syscall)( int arg, ... ) = (int (QDECL *)( int, ...))-1;
+static intptr_t (QDECL *syscall)( intptr_t arg, ... ) = (intptr_t (QDECL *)( intptr_t, ...))-1;
 
-#include "../namespace_begin.h"
-void dllEntry( int (QDECL *syscallptr)( int arg,... ) ) {
+Q_EXPORT_C Q_EXPORT void dllEntry( intptr_t (QDECL *syscallptr)( intptr_t arg,... ) ) {
 	syscall = syscallptr;
 }
 
@@ -24,6 +23,8 @@ void trap_Print( const char *string ) {
 
 void trap_Error( const char *string ) {
 	syscall( UI_ERROR, string );
+	// shut up GCC warning about returning functions, because we know better
+	exit(1);
 }
 
 int trap_Milliseconds( void ) {
@@ -266,7 +267,7 @@ void trap_GetGlconfig( glconfig_t *glconfig ) {
 int trap_GetConfigString( int index, char* buff, int buffsize ) {
 	return syscall( UI_GETCONFIGSTRING, index, buff, buffsize );
 }
-/*
+
 int	trap_LAN_GetServerCount( int source ) {
 	return syscall( UI_LAN_GETSERVERCOUNT, source );
 }
@@ -338,26 +339,10 @@ void trap_LAN_RemoveServer(int source, const char *addr) {
 int trap_LAN_CompareServers( int source, int sortKey, int sortDir, int s1, int s2 ) {
 	return syscall( UI_LAN_COMPARESERVERS, source, sortKey, sortDir, s1, s2 );
 }
-*/
+
 int trap_MemoryRemaining( void ) {
 	return syscall( UI_MEMORY_REMAINING );
 }
-
-#ifdef USE_CD_KEY
-
-void trap_GetCDKey( char *buf, int buflen ) {
-	syscall( UI_GET_CDKEY, buf, buflen );
-}
-
-void trap_SetCDKey( char *buf ) {
-	syscall( UI_SET_CDKEY, buf );
-}
-
-qboolean trap_VerifyCDKey( const char *key, const char *chksum) {
-	return syscall( UI_VERIFY_CDKEY, key, chksum);
-}
-
-#endif // USE_CD_KEY
 
 int trap_PC_AddGlobalDefine( char *define ) {
 	return syscall( UI_PC_ADD_GLOBAL_DEFINE, define );
@@ -402,7 +387,6 @@ int trap_RealTime(qtime_t *qtime) {
 }
 
 // this returns a handle.  arg0 is the name in the format "idlogo.roq", set arg1 to NULL, alteredstates to qfalse (do not alter gamestate)
-/*
 int trap_CIN_PlayCinematic( const char *arg0, int xpos, int ypos, int width, int height, int bits) {
   return syscall(UI_CIN_PLAYCINEMATIC, arg0, xpos, ypos, width, height, bits);
 }
@@ -430,7 +414,7 @@ void trap_CIN_DrawCinematic (int handle) {
 void trap_CIN_SetExtents (int handle, int x, int y, int w, int h) {
   syscall(UI_CIN_SETEXTENTS, handle, x, y, w, h);
 }
-*/
+
 
 void	trap_R_RemapShader( const char *oldShader, const char *newShader, const char *timeOffset ) {
 	syscall( UI_R_REMAP_SHADER, oldShader, newShader, timeOffset );
@@ -518,6 +502,24 @@ void trap_G2API_CollisionDetect (
 	)
 {
 	syscall ( UI_G2_COLLISIONDETECT, collRecMap, ghoul2, angles, position, frameNumber, entNum, rayStart, rayEnd, scale, traceFlags, useLod, PASSFLOAT(fRadius) );
+}
+
+void trap_G2API_CollisionDetectCache ( 
+	CollisionRecord_t *collRecMap, 
+	void* ghoul2, 
+	const vec3_t angles, 
+	const vec3_t position,
+	int frameNumber, 
+	int entNum, 
+	const vec3_t rayStart, 
+	const vec3_t rayEnd, 
+	const vec3_t scale, 
+	int traceFlags, 
+	int useLod,
+	float fRadius
+	)
+{
+	syscall ( UI_G2_COLLISIONDETECTCACHE, collRecMap, ghoul2, angles, position, frameNumber, entNum, rayStart, rayEnd, scale, traceFlags, useLod, PASSFLOAT(fRadius) );
 }
 
 void trap_G2API_CleanGhoul2Models(void **ghoul2Ptr)
@@ -649,4 +651,3 @@ qboolean trap_G2API_AttachG2Model(void *ghoul2From, int modelIndexFrom, void *gh
 Ghoul2 Insert End
 */
 
-#include "../namespace_end.h"

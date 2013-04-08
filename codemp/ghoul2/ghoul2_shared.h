@@ -17,7 +17,7 @@ Ghoul2 Insert End
 */
 
 #define MDXABONEDEF
-#include "../renderer/mdx_format.h"
+#include "renderer/mdx_format.h"
 
 struct model_s;
 
@@ -230,6 +230,9 @@ typedef vector <pair<int,mdxaBone_t> > mdxaBone_v;
 #define		GHOUL2_NORENDER	 0x002
 #define		GHOUL2_NOMODEL	 0x004
 #define		GHOUL2_NEWORIGIN 0x008
+
+//for transform optimization -rww
+#define		GHOUL2_ZONETRANSALLOC	0x2000
 
 class CBoneCache;
 

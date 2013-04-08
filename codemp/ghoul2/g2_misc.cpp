@@ -3,24 +3,24 @@
 
 
 //Anything above this #include will be ignored by the compiler
-#include "../qcommon/exe_headers.h"
+#include "qcommon/exe_headers.h"
 
 
 #if !defined(TR_LOCAL_H)
-	#include "../renderer/tr_local.h"
+	#include "renderer/tr_local.h"
 #endif
 
-#include "../renderer/matcomp.h"
+#include "renderer/matcomp.h"
 
 #if !defined(G2_H_INC)
 	#include "G2.h"
 #endif
 
 #if !defined (MINIHEAP_H_INC)
-	#include "../qcommon/MiniHeap.h"
+	#include "qcommon/MiniHeap.h"
 #endif
 
-#include "../server/server.h"
+#include "server/server.h"
 #include "G2_local.h"
 
 #ifdef _G2_GORE
@@ -37,7 +37,7 @@ static map<pair<int,int>,int> GoreTagsTemp; // this is a surface index to gore t
 								  // temporarily during the generation phase so we reuse gore tags per LOD
 int goreModelIndex;
 
-bool AddGoreToAllModels=false;
+static cvar_t *cg_g2MarksAllModels=NULL;
 
 GoreTextureCoordinates *FindGoreRecord(int tag);
 static inline void DestroyGoreTexCoordinates(int tag)
@@ -397,10 +397,6 @@ int G2_DecideTraceLod(CGhoul2Info &ghoul2, int useLod)
 	return returnLod;
 }
 
-#ifdef _XBOX
-// This is in tr_ghoul2 for various reasons.
-extern void R_TransformEachSurface( const mdxmSurface_t *surface, vec3_t scale, CMiniHeap *G2VertSpace, int *TransformedVertsArray,CBoneCache *boneCache);
-#else
 void R_TransformEachSurface( const mdxmSurface_t *surface, vec3_t scale, CMiniHeap *G2VertSpace, int *TransformedVertsArray,CBoneCache *boneCache) 
 {
 	int				 j, k;
@@ -512,8 +508,6 @@ void R_TransformEachSurface( const mdxmSurface_t *surface, vec3_t scale, CMiniHe
 	}
 }
 
-#endif // _XBOX
-
 void G2_TransformSurfaces(int surfaceNum, surfaceInfo_v &rootSList, 
 					CBoneCache *boneCache, const model_t *currentModel, int lod, vec3_t scale, CMiniHeap *G2VertSpace, int *TransformedVertArray, bool secondTimeAround)
 {
@@ -564,6 +558,18 @@ void G2_TransformModel(CGhoul2Info_v &ghoul2, const int frameNum, vec3_t scale, 
 {
 	int				i, lod;
 	vec3_t			correctScale;
+	qboolean		firstModelOnly = qfalse;
+
+	if ( cg_g2MarksAllModels == NULL )
+	{
+		cg_g2MarksAllModels = Cvar_Get( "cg_g2MarksAllModels", "0", 0 );
+	}
+
+	if (cg_g2MarksAllModels == NULL
+		|| !cg_g2MarksAllModels->integer )
+	{
+		firstModelOnly = qtrue;
+	}
 
 
 	VectorCopy(scale, correctScale);
@@ -604,7 +610,13 @@ void G2_TransformModel(CGhoul2Info_v &ghoul2, const int frameNum, vec3_t scale, 
 			if (lod>=g.currentModel->numLods)
 			{
 				g.mTransformedVertsArray = 0;
-				return;
+				if ( firstModelOnly )
+				{
+					// we don't really need to do multiple models for gore.
+					return;
+				}
+				//do the rest
+				continue;
 			}
 		}
 		else
@@ -616,10 +628,13 @@ void G2_TransformModel(CGhoul2Info_v &ghoul2, const int frameNum, vec3_t scale, 
 #endif
 
 		// give us space for the transformed vertex array to be put in
-		g.mTransformedVertsArray = (int*)G2VertSpace->MiniHeapAlloc(g.currentModel->mdxm->numSurfaces * 4);
-		if (!g.mTransformedVertsArray)
-		{
-			Com_Error(ERR_DROP, "Ran out of transform space for Ghoul2 Models. Adjust MiniHeapSize in SV_SpawnServer.\n");
+		if (!(g.mFlags & GHOUL2_ZONETRANSALLOC))
+		{ //do not stomp if we're using zone space
+			g.mTransformedVertsArray = (int*)G2VertSpace->MiniHeapAlloc(g.currentModel->mdxm->numSurfaces * 4);
+			if (!g.mTransformedVertsArray)
+			{
+				Com_Error(ERR_DROP, "Ran out of transform space for Ghoul2 Models. Adjust MiniHeapSize in SV_SpawnServer.\n");
+			}
 		}
 
 		memset(g.mTransformedVertsArray, 0,(g.currentModel->mdxm->numSurfaces * 4)); 
@@ -630,7 +645,7 @@ void G2_TransformModel(CGhoul2Info_v &ghoul2, const int frameNum, vec3_t scale, 
 		G2_TransformSurfaces(g.mSurfaceRoot, g.mSlist, g.mBoneCache,  g.currentModel, lod, correctScale, G2VertSpace, g.mTransformedVertsArray, false);
 
 #ifdef _G2_GORE
-		if (ApplyGore&&!AddGoreToAllModels)
+		if (ApplyGore && firstModelOnly)
 		{
 			// we don't really need to do multiple models for gore.
 			break;
@@ -1490,7 +1505,7 @@ static void G2_TraceSurfaces(CTraceSurface &TS)
 }
 
 #ifdef _G2_GORE
-void G2_TraceModels(CGhoul2Info_v &ghoul2, vec3_t rayStart, vec3_t rayEnd, CollisionRecord_t *collRecMap, int entNum, int eG2TraceType, int useLod, float fRadius, float ssize,float tsize,float theta,int shader, SSkinGoreData *gore)
+void G2_TraceModels(CGhoul2Info_v &ghoul2, vec3_t rayStart, vec3_t rayEnd, CollisionRecord_t *collRecMap, int entNum, int eG2TraceType, int useLod, float fRadius, float ssize,float tsize,float theta,int shader, SSkinGoreData *gore, qboolean skipIfLODNotMatch)
 #else
 void G2_TraceModels(CGhoul2Info_v &ghoul2, vec3_t rayStart, vec3_t rayEnd, CollisionRecord_t *collRecMap, int entNum, int eG2TraceType, int useLod, float fRadius)
 #endif
@@ -1498,6 +1513,18 @@ void G2_TraceModels(CGhoul2Info_v &ghoul2, vec3_t rayStart, vec3_t rayEnd, Colli
 	int				i, lod;
 	skin_t			*skin;
 	shader_t		*cust_shader;
+	qboolean		firstModelOnly = qfalse;
+
+	if ( cg_g2MarksAllModels == NULL )
+	{
+		cg_g2MarksAllModels = Cvar_Get( "cg_g2MarksAllModels", "0", 0 );
+	}
+
+	if (cg_g2MarksAllModels == NULL
+		|| !cg_g2MarksAllModels->integer )
+	{
+		firstModelOnly = qtrue;
+	}
 
 	// walk each possible model for this entity and try tracing against it
 	for (i=0; i<ghoul2.size(); i++)
@@ -1542,23 +1569,14 @@ void G2_TraceModels(CGhoul2Info_v &ghoul2, vec3_t rayStart, vec3_t rayEnd, Colli
 			skin = NULL;
 		}
 
-#ifdef _G2_GORE
-		if (collRecMap)
-		{
-			lod = G2_DecideTraceLod(ghoul2[i],useLod);
-		}
-		else
-		{
-			lod=useLod;
-			assert(ghoul2[i].currentModel);
-			if (lod>=ghoul2[i].currentModel->numLods)
-			{
-				return;
+		lod = G2_DecideTraceLod(ghoul2[i],useLod);
+		if ( skipIfLODNotMatch )
+		{//we only want to hit this SPECIFIC LOD...
+			if ( lod != useLod )
+			{//doesn't match, skip this model
+				continue;
 			}
 		}
-#else
-		lod = G2_DecideTraceLod(ghoul2[i],useLod);
-#endif
 
 		//reset the quick surface override lookup
 		G2_FindOverrideSurface(-1, ghoul2[i].mSlist); 
@@ -1577,7 +1595,7 @@ void G2_TraceModels(CGhoul2Info_v &ghoul2, vec3_t rayStart, vec3_t rayEnd, Colli
 			break;
 		}
 #ifdef _G2_GORE
-		if (!collRecMap&&!AddGoreToAllModels)
+		if (!collRecMap&&firstModelOnly)
 		{
 			// we don't really need to do multiple models for gore.
 			break;

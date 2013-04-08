@@ -1,15 +1,11 @@
 // Copyright (C) 1999-2000 Id Software, Inc.
 //
-// cg_predict.c -- this file generates cg->predictedPlayerState by either
+// cg_predict.c -- this file generates cg.predictedPlayerState by either
 // interpolating between snapshots from the server or locally predicting
 // ahead the client's movement.
 // It also handles local physics interaction, like fragments bouncing off walls
 
 #include "cg_local.h"
-
-#ifdef _XBOX
-#include "../client/cl_data.h"
-#endif
 
 static	pmove_t		cg_pmove;
 
@@ -30,7 +26,7 @@ static CGAME_INLINE qboolean CG_Piloting(int vehNum)
 
 	veh = &cg_entities[vehNum];
 
-	if (veh->currentState.owner != cg->predictedPlayerState.clientNum)
+	if (veh->currentState.owner != cg.predictedPlayerState.clientNum)
 	{ //the owner should be the current pilot
 		return qfalse;
 	}
@@ -42,7 +38,7 @@ static CGAME_INLINE qboolean CG_Piloting(int vehNum)
 ====================
 CG_BuildSolidList
 
-When a new cg->snap has been set, this function builds a sublist
+When a new cg.snap has been set, this function builds a sublist
 of the entities that are actually solid, to make for more
 efficient collision detection
 ====================
@@ -58,10 +54,10 @@ void CG_BuildSolidList( void ) {
 	cg_numSolidEntities = 0;
 	cg_numTriggerEntities = 0;
 
-	if ( cg->nextSnap && !cg->nextFrameTeleport && !cg->thisFrameTeleport ) {
-		snap = cg->nextSnap;
+	if ( cg.nextSnap && !cg.nextFrameTeleport && !cg.thisFrameTeleport ) {
+		snap = cg.nextSnap;
 	} else {
-		snap = cg->snap;
+		snap = cg.snap;
 	}
 
 	for ( i = 0 ; i < snap->numEntities ; i++ ) {
@@ -114,7 +110,7 @@ void CG_BuildSolidList( void ) {
 		if (k>255)
 			k = 255;
 
-		cg_solidEntities[cg_numSolidEntities] = &cg_entities[cg->predictedPlayerState.clientNum];
+		cg_solidEntities[cg_numSolidEntities] = &cg_entities[cg.predictedPlayerState.clientNum];
 		cg_solidEntities[cg_numSolidEntities]->currentState.solid = (k<<16) | (j<<8) | i;
 
 		cg_numSolidEntities++;
@@ -130,11 +126,7 @@ void CG_BuildSolidList( void ) {
 		if (cent->currentState.eType == ET_TERRAIN ||
 			((difference[0]*difference[0]) + (difference[1]*difference[1]) + (difference[2]*difference[2])) <= dsquared)
 		{
-#ifdef _XBOX
-			cent->currentValid[ClientManager::ActiveClientNum()] = qtrue;
-#else
 			cent->currentValid = qtrue;
-#endif
 			if ( cent->nextState.solid ) 
 			{
 				cg_solidEntities[cg_numSolidEntities] = cent;
@@ -143,11 +135,7 @@ void CG_BuildSolidList( void ) {
 		}
 		else
 		{
-#ifdef _XBOX
-			cent->currentValid[ClientManager::ActiveClientNum()] = qfalse;
-#else
 			cent->currentValid = qfalse;
-#endif
 		}
 	}
 }
@@ -220,11 +208,9 @@ CG_ClipMoveToEntities
 
 ====================
 */
-#include "../namespace_begin.h"
 extern void BG_VehicleAdjustBBoxForOrientation( Vehicle_t *veh, vec3_t origin, vec3_t mins, vec3_t maxs,
 										int clientNum, int tracemask,
 										void (*localTrace)(trace_t *results, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, int passEntityNum, int contentMask)); // bg_pmove.c
-#include "../namespace_end.h"
 static void CG_ClipMoveToEntities ( const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end,
 							int skipNumber, int mask, trace_t *tr, qboolean g2Check ) {
 	int			i, x, zd, zu;
@@ -250,8 +236,8 @@ static void CG_ClipMoveToEntities ( const vec3_t start, const vec3_t mins, const
 		}
 
 		if ( ent->number > MAX_CLIENTS && 
-			 (ent->genericenemyindex-MAX_GENTITIES==cg->predictedPlayerState.clientNum || ent->genericenemyindex-MAX_GENTITIES==cg->predictedVehicleState.clientNum) )
-//		if (ent->number > MAX_CLIENTS && cg->snap && ent->genericenemyindex && (ent->genericenemyindex-MAX_GENTITIES) == cg->snap->ps.clientNum)
+			 (ent->genericenemyindex-MAX_GENTITIES==cg.predictedPlayerState.clientNum || ent->genericenemyindex-MAX_GENTITIES==cg.predictedVehicleState.clientNum) )
+//		if (ent->number > MAX_CLIENTS && cg.snap && ent->genericenemyindex && (ent->genericenemyindex-MAX_GENTITIES) == cg.snap->ps.clientNum)
 		{ //rww - method of keeping objects from colliding in client-prediction (in case of ownership)
 			continue;
 		}
@@ -260,7 +246,7 @@ static void CG_ClipMoveToEntities ( const vec3_t start, const vec3_t mins, const
 			// special value for bmodel
 			cmodel = trap_CM_InlineModel( ent->modelindex );
 			VectorCopy( cent->lerpAngles, angles );
-			BG_EvaluateTrajectory( &cent->currentState.pos, cg->physicsTime, origin );
+			BG_EvaluateTrajectory( &cent->currentState.pos, cg.physicsTime, origin );
 		} else {
 			// encoded bbox
 			x = (ent->solid & 255);
@@ -440,8 +426,8 @@ int		CG_PointContents( const vec3_t point, int passEntityNum ) {
 ========================
 CG_InterpolatePlayerState
 
-Generates cg->predictedPlayerState by interpolating between
-cg->snap->player_state and cg->nextFrame->player_state
+Generates cg.predictedPlayerState by interpolating between
+cg.snap->player_state and cg.nextFrame->player_state
 ========================
 */
 static void CG_InterpolatePlayerState( qboolean grabAngles ) {
@@ -450,11 +436,11 @@ static void CG_InterpolatePlayerState( qboolean grabAngles ) {
 	playerState_t	*out;
 	snapshot_t		*prev, *next;
 
-	out = &cg->predictedPlayerState;
-	prev = cg->snap;
-	next = cg->nextSnap;
+	out = &cg.predictedPlayerState;
+	prev = cg.snap;
+	next = cg.nextSnap;
 
-	*out = cg->snap->ps;
+	*out = cg.snap->ps;
 
 	// if we are still allowing local input, short circuit the view angles
 	if ( grabAngles ) {
@@ -468,7 +454,7 @@ static void CG_InterpolatePlayerState( qboolean grabAngles ) {
 	}
 
 	// if the next frame is a teleport, we can't lerp to it
-	if ( cg->nextFrameTeleport ) {
+	if ( cg.nextFrameTeleport ) {
 		return;
 	}
 
@@ -476,7 +462,7 @@ static void CG_InterpolatePlayerState( qboolean grabAngles ) {
 		return;
 	}
 
-	f = (float)( cg->time - prev->serverTime ) / ( next->serverTime - prev->serverTime );
+	f = (float)( cg.time - prev->serverTime ) / ( next->serverTime - prev->serverTime );
 
 	i = next->ps.bobCycle;
 	if ( i < prev->ps.bobCycle ) {
@@ -502,11 +488,11 @@ static void CG_InterpolateVehiclePlayerState( qboolean grabAngles ) {
 	playerState_t	*out;
 	snapshot_t		*prev, *next;
 
-	out = &cg->predictedVehicleState;
-	prev = cg->snap;
-	next = cg->nextSnap;
+	out = &cg.predictedVehicleState;
+	prev = cg.snap;
+	next = cg.nextSnap;
 
-	*out = cg->snap->vps;
+	*out = cg.snap->vps;
 
 	// if we are still allowing local input, short circuit the view angles
 	if ( grabAngles ) {
@@ -520,7 +506,7 @@ static void CG_InterpolateVehiclePlayerState( qboolean grabAngles ) {
 	}
 
 	// if the next frame is a teleport, we can't lerp to it
-	if ( cg->nextFrameTeleport ) {
+	if ( cg.nextFrameTeleport ) {
 		return;
 	}
 
@@ -528,7 +514,7 @@ static void CG_InterpolateVehiclePlayerState( qboolean grabAngles ) {
 		return;
 	}
 
-	f = (float)( cg->time - prev->serverTime ) / ( next->serverTime - prev->serverTime );
+	f = (float)( cg.time - prev->serverTime ) / ( next->serverTime - prev->serverTime );
 
 	i = next->vps.bobCycle;
 	if ( i < prev->vps.bobCycle ) {
@@ -559,7 +545,7 @@ static void CG_TouchItem( centity_t *cent ) {
 	if ( !cg_predictItems.integer ) {
 		return;
 	}
-	if ( !BG_PlayerTouchesItem( &cg->predictedPlayerState, &cent->currentState, cg->time ) ) {
+	if ( !BG_PlayerTouchesItem( &cg.predictedPlayerState, &cent->currentState, cg.time ) ) {
 		return;
 	}
 
@@ -579,11 +565,11 @@ static void CG_TouchItem( centity_t *cent ) {
 	}
 
 	// never pick an item up twice in a prediction
-	if ( cent->miscTime == cg->time ) {
+	if ( cent->miscTime == cg.time ) {
 		return;
 	}
 
-	if ( !BG_CanItemBeGrabbed( cgs.gametype, &cent->currentState, &cg->predictedPlayerState ) ) {
+	if ( !BG_CanItemBeGrabbed( cgs.gametype, &cent->currentState, &cg.predictedPlayerState ) ) {
 		return;		// can't hold it
 	}
 
@@ -595,7 +581,7 @@ static void CG_TouchItem( centity_t *cent ) {
 /*
 	if (item->giType == IT_ARMOR)
 	{ //rww - this will be stomped next update, but it's set so that we don't try to pick up two shields in one prediction and have the server cancel one
-	//	cg->predictedPlayerState.stats[STAT_ARMOR] += item->quantity;
+	//	cg.predictedPlayerState.stats[STAT_ARMOR] += item->quantity;
 
 		//FIXME: This can't be predicted properly at the moment
 		return;
@@ -603,7 +589,7 @@ static void CG_TouchItem( centity_t *cent ) {
 
 	if (item->giType == IT_HEALTH)
 	{ //same as above, for health
-	//	cg->predictedPlayerState.stats[STAT_HEALTH] += item->quantity;
+	//	cg.predictedPlayerState.stats[STAT_HEALTH] += item->quantity;
 
 		//FIXME: This can't be predicted properly at the moment
 		return;
@@ -611,7 +597,7 @@ static void CG_TouchItem( centity_t *cent ) {
 
 	if (item->giType == IT_AMMO)
 	{ //same as above, for ammo
-	//	cg->predictedPlayerState.ammo[item->giTag] += item->quantity;
+	//	cg.predictedPlayerState.ammo[item->giTag] += item->quantity;
 
 		//FIXME: This can't be predicted properly at the moment
 		return;
@@ -619,16 +605,16 @@ static void CG_TouchItem( centity_t *cent ) {
 
 	if (item->giType == IT_HOLDABLE)
 	{ //same as above, for holdables
-	//	cg->predictedPlayerState.stats[STAT_HOLDABLE_ITEMS] |= (1 << item->giTag);
+	//	cg.predictedPlayerState.stats[STAT_HOLDABLE_ITEMS] |= (1 << item->giTag);
 	}
 */
 	// Special case for flags.  
 	// We don't predict touching our own flag
 	if( cgs.gametype == GT_CTF || cgs.gametype == GT_CTY ) {
-		if (cg->predictedPlayerState.persistant[PERS_TEAM] == TEAM_RED &&
+		if (cg.predictedPlayerState.persistant[PERS_TEAM] == TEAM_RED &&
 			item->giTag == PW_REDFLAG)
 			return;
-		if (cg->predictedPlayerState.persistant[PERS_TEAM] == TEAM_BLUE &&
+		if (cg.predictedPlayerState.persistant[PERS_TEAM] == TEAM_BLUE &&
 			item->giTag == PW_BLUEFLAG)
 			return;
 	}
@@ -638,14 +624,14 @@ static void CG_TouchItem( centity_t *cent ) {
 	{
 		if (item->giTag == PW_FORCE_ENLIGHTENED_LIGHT)
 		{
-			if (cg->predictedPlayerState.fd.forceSide != FORCE_LIGHTSIDE)
+			if (cg.predictedPlayerState.fd.forceSide != FORCE_LIGHTSIDE)
 			{
 				return;
 			}
 		}
 		else
 		{
-			if (cg->predictedPlayerState.fd.forceSide != FORCE_DARKSIDE)
+			if (cg.predictedPlayerState.fd.forceSide != FORCE_DARKSIDE)
 			{
 				return;
 			}
@@ -654,19 +640,19 @@ static void CG_TouchItem( centity_t *cent ) {
 
 
 	// grab it
-	BG_AddPredictableEventToPlayerstate( EV_ITEM_PICKUP, cent->currentState.number , &cg->predictedPlayerState);
+	BG_AddPredictableEventToPlayerstate( EV_ITEM_PICKUP, cent->currentState.number , &cg.predictedPlayerState);
 
 	// remove it from the frame so it won't be drawn
 	cent->currentState.eFlags |= EF_NODRAW;
 
 	// don't touch it again this prediction
-	cent->miscTime = cg->time;
+	cent->miscTime = cg.time;
 
 	// if its a weapon, give them some predicted ammo so the autoswitch will work
 	if ( item->giType == IT_WEAPON ) {
-		cg->predictedPlayerState.stats[ STAT_WEAPONS ] |= 1 << item->giTag;
-		if ( !cg->predictedPlayerState.ammo[ item->giTag ] ) {
-			cg->predictedPlayerState.ammo[ item->giTag ] = 1;
+		cg.predictedPlayerState.stats[ STAT_WEAPONS ] |= 1 << item->giTag;
+		if ( !cg.predictedPlayerState.ammo[ item->giTag ] ) {
+			cg.predictedPlayerState.ammo[ item->giTag ] = 1;
 		}
 	}
 }
@@ -688,13 +674,13 @@ static void CG_TouchTriggerPrediction( void ) {
 	qboolean	spectator;
 
 	// dead clients don't activate triggers
-	if ( cg->predictedPlayerState.stats[STAT_HEALTH] <= 0 ) {
+	if ( cg.predictedPlayerState.stats[STAT_HEALTH] <= 0 ) {
 		return;
 	}
 
-	spectator = ( cg->predictedPlayerState.pm_type == PM_SPECTATOR );
+	spectator = ( cg.predictedPlayerState.pm_type == PM_SPECTATOR );
 
-	if ( cg->predictedPlayerState.pm_type != PM_NORMAL && cg->predictedPlayerState.pm_type != PM_JETPACK && cg->predictedPlayerState.pm_type != PM_FLOAT && !spectator ) {
+	if ( cg.predictedPlayerState.pm_type != PM_NORMAL && cg.predictedPlayerState.pm_type != PM_JETPACK && cg.predictedPlayerState.pm_type != PM_FLOAT && !spectator ) {
 		return;
 	}
 
@@ -716,7 +702,7 @@ static void CG_TouchTriggerPrediction( void ) {
 			continue;
 		}
 
-		trap_CM_BoxTrace( &trace, cg->predictedPlayerState.origin, cg->predictedPlayerState.origin, 
+		trap_CM_BoxTrace( &trace, cg.predictedPlayerState.origin, cg.predictedPlayerState.origin, 
 			cg_pmove.mins, cg_pmove.maxs, cmodel, -1 );
 
 		if ( !trace.startsolid ) {
@@ -724,16 +710,16 @@ static void CG_TouchTriggerPrediction( void ) {
 		}
 
 		if ( ent->eType == ET_TELEPORT_TRIGGER ) {
-			cg->hyperspace = qtrue;
+			cg.hyperspace = qtrue;
 		} else if ( ent->eType == ET_PUSH_TRIGGER ) {
-			BG_TouchJumpPad( &cg->predictedPlayerState, ent );
+			BG_TouchJumpPad( &cg.predictedPlayerState, ent );
 		}
 	}
 
 	// if we didn't touch a jump pad this pmove frame
-	if ( cg->predictedPlayerState.jumppad_frame != cg->predictedPlayerState.pmove_framecount ) {
-		cg->predictedPlayerState.jumppad_frame = 0;
-		cg->predictedPlayerState.jumppad_ent = 0;
+	if ( cg.predictedPlayerState.jumppad_frame != cg.predictedPlayerState.pmove_framecount ) {
+		cg.predictedPlayerState.jumppad_frame = 0;
+		cg.predictedPlayerState.jumppad_ent = 0;
 	}
 }
 
@@ -846,43 +832,8 @@ static ID_INLINE void CG_EntityStateToPlayerState( entityState_t *s, playerState
 }
 #endif
 
-// This many playerState_t structures is painfully large. And we
-// don't need that many. So we just use a small pool of them.
-// PC gets to keep one per entity, just in case.
-#ifdef _XBOX
-
-struct psLinkedNode_t
-{
-	playerState_t	ps;
-	psLinkedNode_t	*next;
-};
-
-#define CG_SEND_PS_POOL_SIZE	64
-psLinkedNode_t cgSendPSPool[ CG_SEND_PS_POOL_SIZE ];
-psLinkedNode_t *cgSendPSFreeList;
-
-#else
 playerState_t cgSendPSPool[ MAX_GENTITIES ];
-#endif
-
 playerState_t *cgSendPS[MAX_GENTITIES];
-
-#ifdef _XBOX
-void AllocSendPlayerstate(int entNum)
-{
-	if (cgSendPS[entNum])
-	{
-		//Com_Printf( S_COLOR_RED "ERROR: Entity %d already has a playerstate!\n", entNum );
-		return;
-	}
-
-	if (!cgSendPSFreeList)
-		Com_Error( ERR_DROP, "ERROR: No free playerstates! Increase CG_SEND_PS_POOL_SIZE\n" );
-
-	cgSendPS[entNum] = &cgSendPSFreeList->ps;
-	cgSendPSFreeList = cgSendPSFreeList->next;
-}
-#endif
 
 //#define _PROFILE_ES_TO_PS
 
@@ -901,25 +852,11 @@ void CG_PmoveClientPointerUpdate()
 
 	for ( i = 0 ; i < MAX_GENTITIES ; i++ )
 	{
-#ifdef _XBOX
-		cgSendPS[i] = NULL;
-#else
 		cgSendPS[i] = &cgSendPSPool[i];
-#endif
 
 		// These will be invalid at this point on Xbox
 		cg_entities[i].playerState = cgSendPS[i];
 	}
-
-#ifdef _XBOX
-	for ( i = 0; i < CG_SEND_PS_POOL_SIZE - 1; i++ )
-	{
-		cgSendPSPool[i].next = &cgSendPSPool[i+1];
-	}
-	
-	// Last .next is already NULL from memset above
-	cgSendPSFreeList = &cgSendPSPool[0];
-#endif
 
 	//Set up bg entity data
 	cg_pmove.baseEnt = (bgEntity_t *)cg_entities;
@@ -931,8 +868,8 @@ void CG_PmoveClientPointerUpdate()
 //check if local client is on an eweb
 qboolean CG_UsingEWeb(void)
 {
-	if (cg->predictedPlayerState.weapon == WP_EMPLACED_GUN && cg->predictedPlayerState.emplacedIndex &&
-		cg_entities[cg->predictedPlayerState.emplacedIndex].currentState.weapon == WP_NONE)
+	if (cg.predictedPlayerState.weapon == WP_EMPLACED_GUN && cg.predictedPlayerState.emplacedIndex &&
+		cg_entities[cg.predictedPlayerState.emplacedIndex].currentState.weapon == WP_NONE)
 	{
 		return qtrue;
 	}
@@ -944,8 +881,8 @@ qboolean CG_UsingEWeb(void)
 =================
 CG_PredictPlayerState
 
-Generates cg->predictedPlayerState for the current cg->time
-cg->predictedPlayerState is guaranteed to be valid after exiting.
+Generates cg.predictedPlayerState for the current cg.time
+cg.predictedPlayerState is guaranteed to be valid after exiting.
 
 For demo playback, this will be an interpolation between two valid
 playerState_t.
@@ -982,24 +919,24 @@ void CG_PredictPlayerState( void ) {
 	centity_t *pEnt;
 	clientInfo_t *ci;
 
-	cg->hyperspace = qfalse;	// will be set if touching a trigger_teleport
+	cg.hyperspace = qfalse;	// will be set if touching a trigger_teleport
 
 	// if this is the first frame we must guarantee
 	// predictedPlayerState is valid even if there is some
 	// other error condition
-	if ( !cg->validPPS ) {
-		cg->validPPS = qtrue;
-		cg->predictedPlayerState = cg->snap->ps;
-		if (CG_Piloting(cg->snap->ps.m_iVehicleNum))
+	if ( !cg.validPPS ) {
+		cg.validPPS = qtrue;
+		cg.predictedPlayerState = cg.snap->ps;
+		if (CG_Piloting(cg.snap->ps.m_iVehicleNum))
 		{
-			cg->predictedVehicleState = cg->snap->vps;
+			cg.predictedVehicleState = cg.snap->vps;
 		}
 	}
 
 	// demo playback just copies the moves
-	if ( cg->demoPlayback || (cg->snap->ps.pm_flags & PMF_FOLLOW) ) {
+	if ( cg.demoPlayback || (cg.snap->ps.pm_flags & PMF_FOLLOW) ) {
 		CG_InterpolatePlayerState( qfalse );
-		if (CG_Piloting(cg->predictedPlayerState.m_iVehicleNum))
+		if (CG_Piloting(cg.predictedPlayerState.m_iVehicleNum))
 		{
 			CG_InterpolateVehiclePlayerState(qfalse);
 		}
@@ -1007,20 +944,9 @@ void CG_PredictPlayerState( void ) {
 	}
 
 	// non-predicting local movement will grab the latest angles
-#ifdef _XBOX
-	if ( ClientManager::splitScreenMode == qtrue) {
+	if ( cg_noPredict.integer || g_synchronousClients.integer || CG_UsingEWeb() ) {
 		CG_InterpolatePlayerState( qtrue );
-		if (CG_Piloting(cg->predictedPlayerState.m_iVehicleNum))
-		{
-			CG_InterpolateVehiclePlayerState(qtrue);
-		}
-		return;
-	}
-#endif
-
-	if ( cg_nopredict.integer || cg_synchronousClients.integer || CG_UsingEWeb() ) {
-		CG_InterpolatePlayerState( qtrue );
-		if (CG_Piloting(cg->predictedPlayerState.m_iVehicleNum))
+		if (CG_Piloting(cg.predictedPlayerState.m_iVehicleNum))
 		{
 			CG_InterpolateVehiclePlayerState(qtrue);
 		}
@@ -1028,18 +954,18 @@ void CG_PredictPlayerState( void ) {
 	}
 
 	// prepare for pmove
-	cg_pmove.ps = &cg->predictedPlayerState;
+	cg_pmove.ps = &cg.predictedPlayerState;
 	cg_pmove.trace = CG_Trace;
 	cg_pmove.pointcontents = CG_PointContents;
 
-	pEnt = &cg_entities[cg->predictedPlayerState.clientNum];
+	pEnt = &cg_entities[cg.predictedPlayerState.clientNum];
 	//rww - bgghoul2
 	if (cg_pmove.ghoul2 != pEnt->ghoul2) //only update it if the g2 instance has changed
 	{
-		if (cg->snap &&
+		if (cg.snap &&
 			pEnt->ghoul2 &&
-			!(cg->snap->ps.pm_flags & PMF_FOLLOW) &&
-			cg->snap->ps.persistant[PERS_TEAM] != TEAM_SPECTATOR)
+			!(cg.snap->ps.pm_flags & PMF_FOLLOW) &&
+			cg.snap->ps.persistant[PERS_TEAM] != TEAM_SPECTATOR)
 		{
 			cg_pmove.ghoul2 = pEnt->ghoul2;
 			cg_pmove.g2Bolts_LFoot = trap_G2API_AddBolt(pEnt->ghoul2, 0, "*l_leg_foot");
@@ -1051,7 +977,7 @@ void CG_PredictPlayerState( void ) {
 		}
 	}
 
-	ci = &cgs.clientinfo[cg->predictedPlayerState.clientNum];
+	ci = &cgs.clientinfo[cg.predictedPlayerState.clientNum];
 
 	//I'll just do this every frame in case the scale changes in realtime (don't need to update the g2 inst for that)
 	VectorCopy(pEnt->modelScale, cg_pmove.modelScale);
@@ -1063,16 +989,16 @@ void CG_PredictPlayerState( void ) {
 	else {
 		cg_pmove.tracemask = MASK_PLAYERSOLID;
 	}
-	if ( cg->snap->ps.persistant[PERS_TEAM] == TEAM_SPECTATOR ) {
+	if ( cg.snap->ps.persistant[PERS_TEAM] == TEAM_SPECTATOR ) {
 		cg_pmove.tracemask &= ~CONTENTS_BODY;	// spectators can fly through bodies
 	}
 	cg_pmove.noFootsteps = ( cgs.dmflags & DF_NO_FOOTSTEPS ) > 0;
 
 	// save the state before the pmove so we can detect transitions
-	oldPlayerState = cg->predictedPlayerState;
-	if (CG_Piloting(cg->predictedPlayerState.m_iVehicleNum))
+	oldPlayerState = cg.predictedPlayerState;
+	if (CG_Piloting(cg.predictedPlayerState.m_iVehicleNum))
 	{
-		oldVehicleState = cg->predictedVehicleState;
+		oldVehicleState = cg.predictedVehicleState;
 	}
 
 	current = trap_GetCurrentCmdNumber();
@@ -1082,9 +1008,9 @@ void CG_PredictPlayerState( void ) {
 	// the last good position we had
 	cmdNum = current - CMD_BACKUP + 1;
 	trap_GetUserCmd( cmdNum, &oldestCmd );
-	if ( oldestCmd.serverTime > cg->snap->ps.commandTime 
-		&& oldestCmd.serverTime < cg->time ) {	// special check for map_restart
-		if ( cg_showmiss.integer ) {
+	if ( oldestCmd.serverTime > cg.snap->ps.commandTime 
+		&& oldestCmd.serverTime < cg.time ) {	// special check for map_restart
+		if ( cg_showMiss.integer ) {
 			CG_Printf ("exceeded PACKET_BACKUP on commands\n");
 		}
 		return;
@@ -1094,25 +1020,25 @@ void CG_PredictPlayerState( void ) {
 	trap_GetUserCmd( current, &latestCmd );
 
 	// get the most recent information we have, even if
-	// the server time is beyond our current cg->time,
+	// the server time is beyond our current cg.time,
 	// because predicted player positions are going to 
 	// be ahead of everything else anyway
-	if ( cg->nextSnap && !cg->nextFrameTeleport && !cg->thisFrameTeleport ) {
-		cg->nextSnap->ps.slopeRecalcTime = cg->predictedPlayerState.slopeRecalcTime; //this is the only value we want to maintain seperately on server/client
-		cg->predictedPlayerState = cg->nextSnap->ps;
-		if (CG_Piloting(cg->nextSnap->ps.m_iVehicleNum))
+	if ( cg.nextSnap && !cg.nextFrameTeleport && !cg.thisFrameTeleport ) {
+		cg.nextSnap->ps.slopeRecalcTime = cg.predictedPlayerState.slopeRecalcTime; //this is the only value we want to maintain seperately on server/client
+		cg.predictedPlayerState = cg.nextSnap->ps;
+		if (CG_Piloting(cg.nextSnap->ps.m_iVehicleNum))
 		{
-			cg->predictedVehicleState = cg->nextSnap->vps;
+			cg.predictedVehicleState = cg.nextSnap->vps;
 		}
-		cg->physicsTime = cg->nextSnap->serverTime;
+		cg.physicsTime = cg.nextSnap->serverTime;
 	} else {
-		cg->snap->ps.slopeRecalcTime = cg->predictedPlayerState.slopeRecalcTime; //this is the only value we want to maintain seperately on server/client
-		cg->predictedPlayerState = cg->snap->ps;
-		if (CG_Piloting(cg->snap->ps.m_iVehicleNum))
+		cg.snap->ps.slopeRecalcTime = cg.predictedPlayerState.slopeRecalcTime; //this is the only value we want to maintain seperately on server/client
+		cg.predictedPlayerState = cg.snap->ps;
+		if (CG_Piloting(cg.snap->ps.m_iVehicleNum))
 		{
-			cg->predictedVehicleState = cg->snap->vps;
+			cg.predictedVehicleState = cg.snap->vps;
 		}
-		cg->physicsTime = cg->snap->serverTime;
+		cg.physicsTime = cg.snap->serverTime;
 	}
 
 	if ( pmove_msec.integer < 8 ) {
@@ -1136,9 +1062,6 @@ void CG_PredictPlayerState( void ) {
 			cg_entities[i].currentState.eType == ET_NPC)
 		{
 			// Need a new playerState_t on Xbox
-#ifdef _XBOX
-			AllocSendPlayerstate(i);
-#endif
 			VectorCopy( cg_entities[i].currentState.pos.trBase, cgSendPS[i]->origin );
 			VectorCopy( cg_entities[i].currentState.pos.trDelta, cgSendPS[i]->velocity );
 			cgSendPS[i]->saberLockFrame = cg_entities[i].currentState.forceFrame;
@@ -1151,14 +1074,14 @@ void CG_PredictPlayerState( void ) {
 		}
 	}
 
-	if (CG_Piloting(cg->predictedPlayerState.m_iVehicleNum))
+	if (CG_Piloting(cg.predictedPlayerState.m_iVehicleNum))
 	{
-		cg_entities[cg->predictedPlayerState.clientNum].playerState = &cg->predictedPlayerState;
-		cg_entities[cg->predictedPlayerState.m_iVehicleNum].playerState = &cg->predictedVehicleState;
+		cg_entities[cg.predictedPlayerState.clientNum].playerState = &cg.predictedPlayerState;
+		cg_entities[cg.predictedPlayerState.m_iVehicleNum].playerState = &cg.predictedVehicleState;
 
 		//use the player command time, because we are running with the player cmds (this is even the case
 		//on the server)
-		cg->predictedVehicleState.commandTime = cg->predictedPlayerState.commandTime;
+		cg.predictedVehicleState.commandTime = cg.predictedPlayerState.commandTime;
 	}
 
 	// run cmds
@@ -1172,7 +1095,7 @@ void CG_PredictPlayerState( void ) {
 		}
 
 		// don't do anything if the time is before the snapshot player time
-		if ( cg_pmove.cmd.serverTime <= cg->predictedPlayerState.commandTime )
+		if ( cg_pmove.cmd.serverTime <= cg.predictedPlayerState.commandTime )
 		{
 			continue;
 		}
@@ -1188,22 +1111,22 @@ void CG_PredictPlayerState( void ) {
 		// to predict several commands to get to the point
 		// we want to compare
 		if ( CG_Piloting(oldPlayerState.m_iVehicleNum) &&
-			cg->predictedVehicleState.commandTime == oldVehicleState.commandTime )
+			cg.predictedVehicleState.commandTime == oldVehicleState.commandTime )
 		{
 			vec3_t	delta;
 			float	len;
 
-			if ( cg->thisFrameTeleport ) {
+			if ( cg.thisFrameTeleport ) {
 				// a teleport will not cause an error decay
-				VectorClear( cg->predictedError );
+				VectorClear( cg.predictedError );
 				if ( cg_showVehMiss.integer ) {
 					CG_Printf( "VEH PredictionTeleport\n" );
 				}
-				cg->thisFrameTeleport = qfalse;
+				cg.thisFrameTeleport = qfalse;
 			} else {
 				vec3_t	adjusted;
-				CG_AdjustPositionForMover( cg->predictedVehicleState.origin, 
-					cg->predictedVehicleState.groundEntityNum, cg->physicsTime, cg->oldTime, adjusted );
+				CG_AdjustPositionForMover( cg.predictedVehicleState.origin, 
+					cg.predictedVehicleState.groundEntityNum, cg.physicsTime, cg.oldTime, adjusted );
 
 				if ( cg_showVehMiss.integer ) {
 					if (!VectorCompare( oldVehicleState.origin, adjusted )) {
@@ -1220,7 +1143,7 @@ void CG_PredictPlayerState( void ) {
 						int		t;
 						float	f;
 
-						t = cg->time - cg->predictedErrorTime;
+						t = cg.time - cg.predictedErrorTime;
 						f = ( cg_errorDecay.value - t ) / cg_errorDecay.value;
 						if ( f < 0 ) {
 							f = 0;
@@ -1228,43 +1151,43 @@ void CG_PredictPlayerState( void ) {
 						if ( f > 0 && cg_showVehMiss.integer ) {
 							CG_Printf("VEH Double prediction decay: %f\n", f);
 						}
-						VectorScale( cg->predictedError, f, cg->predictedError );
+						VectorScale( cg.predictedError, f, cg.predictedError );
 					} else {
-						VectorClear( cg->predictedError );
+						VectorClear( cg.predictedError );
 					}
-					VectorAdd( delta, cg->predictedError, cg->predictedError );
-					cg->predictedErrorTime = cg->oldTime;
+					VectorAdd( delta, cg.predictedError, cg.predictedError );
+					cg.predictedErrorTime = cg.oldTime;
 				}
 				//
 				if ( cg_showVehMiss.integer ) {
-					if (!VectorCompare( oldVehicleState.vehOrientation, cg->predictedVehicleState.vehOrientation )) {
+					if (!VectorCompare( oldVehicleState.vehOrientation, cg.predictedVehicleState.vehOrientation )) {
 						CG_Printf("VEH orient prediction error\n");
-						CG_Printf("VEH pitch prediction miss: %f\n", AngleSubtract( oldVehicleState.vehOrientation[0], cg->predictedVehicleState.vehOrientation[0] ) );
-						CG_Printf("VEH yaw prediction miss: %f\n", AngleSubtract( oldVehicleState.vehOrientation[1], cg->predictedVehicleState.vehOrientation[1] ) );
-						CG_Printf("VEH roll prediction miss: %f\n", AngleSubtract( oldVehicleState.vehOrientation[2], cg->predictedVehicleState.vehOrientation[2] ) );
+						CG_Printf("VEH pitch prediction miss: %f\n", AngleSubtract( oldVehicleState.vehOrientation[0], cg.predictedVehicleState.vehOrientation[0] ) );
+						CG_Printf("VEH yaw prediction miss: %f\n", AngleSubtract( oldVehicleState.vehOrientation[1], cg.predictedVehicleState.vehOrientation[1] ) );
+						CG_Printf("VEH roll prediction miss: %f\n", AngleSubtract( oldVehicleState.vehOrientation[2], cg.predictedVehicleState.vehOrientation[2] ) );
 					}
 				}
 			}
 		}
 		else if ( !oldPlayerState.m_iVehicleNum && //don't do pred err on ps while riding veh
-			cg->predictedPlayerState.commandTime == oldPlayerState.commandTime )
+			cg.predictedPlayerState.commandTime == oldPlayerState.commandTime )
 		{
 			vec3_t	delta;
 			float	len;
 
-			if ( cg->thisFrameTeleport ) {
+			if ( cg.thisFrameTeleport ) {
 				// a teleport will not cause an error decay
-				VectorClear( cg->predictedError );
-				if ( cg_showmiss.integer ) {
+				VectorClear( cg.predictedError );
+				if ( cg_showMiss.integer ) {
 					CG_Printf( "PredictionTeleport\n" );
 				}
-				cg->thisFrameTeleport = qfalse;
+				cg.thisFrameTeleport = qfalse;
 			} else {
 				vec3_t	adjusted;
-				CG_AdjustPositionForMover( cg->predictedPlayerState.origin, 
-					cg->predictedPlayerState.groundEntityNum, cg->physicsTime, cg->oldTime, adjusted );
+				CG_AdjustPositionForMover( cg.predictedPlayerState.origin, 
+					cg.predictedPlayerState.groundEntityNum, cg.physicsTime, cg.oldTime, adjusted );
 
-				if ( cg_showmiss.integer ) {
+				if ( cg_showMiss.integer ) {
 					if (!VectorCompare( oldPlayerState.origin, adjusted )) {
 						CG_Printf("prediction error\n");
 					}
@@ -1272,27 +1195,27 @@ void CG_PredictPlayerState( void ) {
 				VectorSubtract( oldPlayerState.origin, adjusted, delta );
 				len = VectorLength( delta );
 				if ( len > 0.1 ) {
-					if ( cg_showmiss.integer ) {
+					if ( cg_showMiss.integer ) {
 						CG_Printf("Prediction miss: %f\n", len);
 					}
 					if ( cg_errorDecay.integer ) {
 						int		t;
 						float	f;
 
-						t = cg->time - cg->predictedErrorTime;
+						t = cg.time - cg.predictedErrorTime;
 						f = ( cg_errorDecay.value - t ) / cg_errorDecay.value;
 						if ( f < 0 ) {
 							f = 0;
 						}
-						if ( f > 0 && cg_showmiss.integer ) {
+						if ( f > 0 && cg_showMiss.integer ) {
 							CG_Printf("Double prediction decay: %f\n", f);
 						}
-						VectorScale( cg->predictedError, f, cg->predictedError );
+						VectorScale( cg.predictedError, f, cg.predictedError );
 					} else {
-						VectorClear( cg->predictedError );
+						VectorClear( cg.predictedError );
 					}
-					VectorAdd( delta, cg->predictedError, cg->predictedError );
-					cg->predictedErrorTime = cg->oldTime;
+					VectorAdd( delta, cg.predictedError, cg.predictedError );
+					cg.predictedErrorTime = cg.oldTime;
 				}
 			}
 		}
@@ -1310,15 +1233,15 @@ void CG_PredictPlayerState( void ) {
 
 		cg_pmove.nonHumanoid = (pEnt->localAnimIndex > 0);
 
-		if (cg->snap && cg->snap->ps.saberLockTime > cg->time)
+		if (cg.snap && cg.snap->ps.saberLockTime > cg.time)
 		{
-			centity_t *blockOpp = &cg_entities[cg->snap->ps.saberLockEnemy];
+			centity_t *blockOpp = &cg_entities[cg.snap->ps.saberLockEnemy];
 
 			if (blockOpp)
 			{
 				vec3_t lockDir, lockAng;
 
-				VectorSubtract( blockOpp->lerpOrigin, cg->snap->ps.origin, lockDir );
+				VectorSubtract( blockOpp->lerpOrigin, cg.snap->ps.origin, lockDir );
 				vectoangles(lockDir, lockAng);
 
 				VectorCopy(lockAng, cg_pmove.ps->viewangles);
@@ -1341,18 +1264,18 @@ void CG_PredictPlayerState( void ) {
 	
 		Pmove (&cg_pmove);
 
-		if (CG_Piloting(cg->predictedPlayerState.m_iVehicleNum) &&
-			cg->predictedPlayerState.pm_type != PM_INTERMISSION)
+		if (CG_Piloting(cg.predictedPlayerState.m_iVehicleNum) &&
+			cg.predictedPlayerState.pm_type != PM_INTERMISSION)
 		{ //we're riding a vehicle, let's predict it
-			centity_t *veh = &cg_entities[cg->predictedPlayerState.m_iVehicleNum];
+			centity_t *veh = &cg_entities[cg.predictedPlayerState.m_iVehicleNum];
 			int x, zd, zu;
 
 			if (veh->m_pVehicle)
 			{ //make sure pointer is set up to go to our predicted state
-				veh->m_pVehicle->m_vOrientation = &cg->predictedVehicleState.vehOrientation[0];
+				veh->m_pVehicle->m_vOrientation = &cg.predictedVehicleState.vehOrientation[0];
 
 				//keep this updated based on what the playerstate says
-				veh->m_pVehicle->m_iRemovedSurfaces = cg->predictedVehicleState.vehSurfaces;
+				veh->m_pVehicle->m_iRemovedSurfaces = cg.predictedVehicleState.vehSurfaces;
 
 				trap_GetUserCmd( cmdNum, &veh->m_pVehicle->m_ucmd );
 
@@ -1363,7 +1286,7 @@ void CG_PredictPlayerState( void ) {
 					veh->m_pVehicle->m_ucmd.rightmove = 0;
 					veh->m_pVehicle->m_ucmd.upmove = 0;
 				}
-				cg_vehPmove.ps = &cg->predictedVehicleState;
+				cg_vehPmove.ps = &cg.predictedVehicleState;
 				cg_vehPmove.animations = bgAllAnims[veh->localAnimIndex].anims;
 
 				memcpy(&cg_vehPmove.cmd, &veh->m_pVehicle->m_ucmd, sizeof(usercmd_t));
@@ -1422,17 +1345,17 @@ void CG_PredictPlayerState( void ) {
 				cg_vehPmove.pmove_fixed = pmove_fixed.integer;
 				cg_vehPmove.pmove_msec = pmove_msec.integer;
 
-				cg_entities[cg->predictedPlayerState.clientNum].playerState = &cg->predictedPlayerState;
-				veh->playerState = &cg->predictedVehicleState;
+				cg_entities[cg.predictedPlayerState.clientNum].playerState = &cg.predictedPlayerState;
+				veh->playerState = &cg.predictedVehicleState;
 
 				//update boarding value sent from server. boarding is not predicted, but no big deal
-				veh->m_pVehicle->m_iBoarding = cg->predictedVehicleState.vehBoarding;
+				veh->m_pVehicle->m_iBoarding = cg.predictedVehicleState.vehBoarding;
 
 				Pmove(&cg_vehPmove);
 				/*
 				if ( !cg_paused.integer )
 				{
-					Com_Printf( "%d - PITCH change %4.2f\n", cg->time, AngleSubtract(veh->m_pVehicle->m_vOrientation[0],veh->m_pVehicle->m_vPrevOrientation[0]) );
+					Com_Printf( "%d - PITCH change %4.2f\n", cg.time, AngleSubtract(veh->m_pVehicle->m_vOrientation[0],veh->m_pVehicle->m_vPrevOrientation[0]) );
 				}
 				*/
 				if ( cg_showVehBounds.integer )
@@ -1452,66 +1375,62 @@ void CG_PredictPlayerState( void ) {
 		CG_TouchTriggerPrediction();
 
 		// check for predictable events that changed from previous predictions
-		//CG_CheckChangedPredictableEvents(&cg->predictedPlayerState);
+		//CG_CheckChangedPredictableEvents(&cg.predictedPlayerState);
 	}
 
-	if ( cg_showmiss.integer > 1 ) {
-		CG_Printf( "[%i : %i] ", cg_pmove.cmd.serverTime, cg->time );
+	if ( cg_showMiss.integer > 1 ) {
+		CG_Printf( "[%i : %i] ", cg_pmove.cmd.serverTime, cg.time );
 	}
 
 	if ( !moved ) {
-		if ( cg_showmiss.integer ) {
+		if ( cg_showMiss.integer ) {
 			CG_Printf( "not moved\n" );
 		}
 		goto revertES;
 	}
 
-	if (CG_Piloting(cg->predictedPlayerState.m_iVehicleNum))
+	if (CG_Piloting(cg.predictedPlayerState.m_iVehicleNum))
 	{
-		CG_AdjustPositionForMover( cg->predictedVehicleState.origin, 
-			cg->predictedVehicleState.groundEntityNum, 
-			cg->physicsTime, cg->time, cg->predictedVehicleState.origin );
+		CG_AdjustPositionForMover( cg.predictedVehicleState.origin, 
+			cg.predictedVehicleState.groundEntityNum, 
+			cg.physicsTime, cg.time, cg.predictedVehicleState.origin );
 	}
 	else
 	{
 		// adjust for the movement of the groundentity
-		CG_AdjustPositionForMover( cg->predictedPlayerState.origin, 
-			cg->predictedPlayerState.groundEntityNum, 
-			cg->physicsTime, cg->time, cg->predictedPlayerState.origin );
+		CG_AdjustPositionForMover( cg.predictedPlayerState.origin, 
+			cg.predictedPlayerState.groundEntityNum, 
+			cg.physicsTime, cg.time, cg.predictedPlayerState.origin );
 	}
 
-	if ( cg_showmiss.integer ) {
-		if (cg->predictedPlayerState.eventSequence > oldPlayerState.eventSequence + MAX_PS_EVENTS) {
-#ifndef FINAL_BUILD
+	if ( cg_showMiss.integer ) {
+		if (cg.predictedPlayerState.eventSequence > oldPlayerState.eventSequence + MAX_PS_EVENTS) {
 			CG_Printf("WARNING: dropped event\n");
-#endif
 		}
 	}
 
 	// fire events and other transition triggered things
-	CG_TransitionPlayerState( &cg->predictedPlayerState, &oldPlayerState );
+	CG_TransitionPlayerState( &cg.predictedPlayerState, &oldPlayerState );
 
-	if ( cg_showmiss.integer ) {
-		if (cg->eventSequence > cg->predictedPlayerState.eventSequence) {
-#ifndef FINAL_BUILD
+	if ( cg_showMiss.integer ) {
+		if (cg.eventSequence > cg.predictedPlayerState.eventSequence) {
 			CG_Printf("WARNING: double event\n");
-#endif
-			cg->eventSequence = cg->predictedPlayerState.eventSequence;
+			cg.eventSequence = cg.predictedPlayerState.eventSequence;
 		}
 	}
 
-	if (cg->predictedPlayerState.m_iVehicleNum &&
-		!CG_Piloting(cg->predictedPlayerState.m_iVehicleNum))
+	if (cg.predictedPlayerState.m_iVehicleNum &&
+		!CG_Piloting(cg.predictedPlayerState.m_iVehicleNum))
 	{ //a passenger on this vehicle, bolt them in
-		centity_t *veh = &cg_entities[cg->predictedPlayerState.m_iVehicleNum];
-		VectorCopy(veh->lerpAngles, cg->predictedPlayerState.viewangles);
-		VectorCopy(veh->lerpOrigin, cg->predictedPlayerState.origin);
+		centity_t *veh = &cg_entities[cg.predictedPlayerState.m_iVehicleNum];
+		VectorCopy(veh->lerpAngles, cg.predictedPlayerState.viewangles);
+		VectorCopy(veh->lerpOrigin, cg.predictedPlayerState.origin);
 	}
 
 revertES:
-	if (CG_Piloting(cg->predictedPlayerState.m_iVehicleNum))
+	if (CG_Piloting(cg.predictedPlayerState.m_iVehicleNum))
 	{
-		centity_t *veh = &cg_entities[cg->predictedPlayerState.m_iVehicleNum];
+		centity_t *veh = &cg_entities[cg.predictedPlayerState.m_iVehicleNum];
 
 		if (veh->m_pVehicle)
 		{
@@ -1519,7 +1438,7 @@ revertES:
 			veh->m_pVehicle->m_vOrientation = &cgSendPS[veh->currentState.number]->vehOrientation[0];
 		}
 
-		cg_entities[cg->predictedPlayerState.clientNum].playerState = cgSendPS[cg->predictedPlayerState.clientNum];
+		cg_entities[cg.predictedPlayerState.clientNum].playerState = cgSendPS[cg.predictedPlayerState.clientNum];
 		veh->playerState = cgSendPS[veh->currentState.number];
 	}
 

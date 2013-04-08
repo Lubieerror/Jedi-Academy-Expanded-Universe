@@ -23,9 +23,9 @@
 
 #pragma warning( disable : 4786) 
 
-#if defined(_WIN32) && !defined(_XBOX)
-#define COM_NO_WINDOWS_H
-#include <objbase.h>
+#if defined(_WIN32)
+	#define COM_NO_WINDOWS_H
+	#include <objbase.h>
 #endif
 
 #include <map>
@@ -33,8 +33,8 @@
 #include <list>
 using namespace std;
 
-#include "../server.h"
-#include "../../game/q_shared.h"
+#include "server/server.h"
+#include "qcommon/q_shared.h"
 
 
 typedef multimap<int, int> EdgeMultimap;

@@ -1,8 +1,8 @@
 //NPC_utils.cpp
 
 #include "b_local.h"
-#include "../icarus/Q3_Interface.h"
-#include "../ghoul2/G2.h"
+#include "icarus/Q3_Interface.h"
+#include "ghoul2/G2.h"
 
 int	teamNumbers[TEAM_NUM_TEAMS];
 int	teamStrength[TEAM_NUM_TEAMS];
@@ -905,13 +905,8 @@ qboolean G_ActivateBehavior (gentity_t *self, int bset )
 //rww - special system for sync'ing bone angles between client and server.
 void NPC_SetBoneAngles(gentity_t *ent, char *bone, vec3_t angles)
 {
-#ifdef _XBOX
-	byte *thebone = &ent->s.boneIndex1;
-	byte *firstFree = NULL;
-#else
 	int *thebone = &ent->s.boneIndex1;
 	int *firstFree = NULL;
-#endif
 	int i = 0;
 	int boneIndex = G_BoneIndex(bone);
 	int flags, up, right, forward;
@@ -939,7 +934,6 @@ void NPC_SetBoneAngles(gentity_t *ent, char *bone, vec3_t angles)
 			thebone = &ent->s.boneIndex2;
 			boneVector = &ent->s.boneAngles2;
 			break;
-/*
 		case 1:
 			thebone = &ent->s.boneIndex3;
 			boneVector = &ent->s.boneAngles3;
@@ -948,7 +942,6 @@ void NPC_SetBoneAngles(gentity_t *ent, char *bone, vec3_t angles)
 			thebone = &ent->s.boneIndex4;
 			boneVector = &ent->s.boneAngles4;
 			break;
-*/
 		default:
 			thebone = NULL;
 			boneVector = NULL;
@@ -962,9 +955,7 @@ void NPC_SetBoneAngles(gentity_t *ent, char *bone, vec3_t angles)
 	{ //didn't find it, create it
 		if (!firstFree)
 		{ //no free bones.. can't do a thing then.
-#ifndef FINAL_BUILD
 			Com_Printf("WARNING: NPC has no free bone indexes\n");
-#endif
 			return;
 		}
 
@@ -1019,9 +1010,7 @@ void NPC_SetSurfaceOnOff(gentity_t *ent, const char *surfaceName, int surfaceFla
 
 	if (!foundIt)
 	{
-#ifndef FINAL_BUILD
 		Com_Printf("WARNING: Tried to toggle NPC surface that isn't in toggleable surface list (%s)\n", surfaceName);
-#endif
 		return;
 	}
 
